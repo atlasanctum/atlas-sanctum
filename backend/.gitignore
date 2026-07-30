@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+logs/
+*.log
+
+# Audit log files — contain PII and internal IPs
+application-*.log
+error-*.log
+security-*.log
+*.audit.json

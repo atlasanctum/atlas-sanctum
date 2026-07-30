@@ -1,0 +1,42 @@
+# Robots.txt for Atlas Genesis
+# Allow all major search engines and social media crawlers
+
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Slurp
+Allow: /
+Crawl-delay: 1
+
+User-agent: DuckDuckBot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+# Disallow admin and sensitive areas
+User-agent: *
+Disallow: /admin/
+Disallow: /auth
+Disallow: /onboarding
+Disallow: /settings
+Disallow: /profile
+Crawl-delay: 1
+
+# Sitemap
+Sitemap: https://atlassanctum.com/sitemap.xml

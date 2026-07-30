@@ -1,0 +1,557 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# ATLAS SANCTUM — PHASE 6 KUBERNETES: PLANETARY SCALE
+# Digital Twins | 1M Agents | UN SDG | Bond Market | PQ Crypto | Global Observability
+# ═══════════════════════════════════════════════════════════════════════════════
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atlas-phase6
+  labels:
+    phase: "6"
+    istio-injection: enabled
+    scale: planetary
+
+---
+# ─── DIGITAL TWIN ENGINE ──────────────────────────────────────────────────────
+# Creates and maintains digital twins for 500+ biomes
+# Each twin: real-time state, 25-year forecast, intervention simulation
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: digital-twin-engine
+  namespace: atlas-phase6
+  labels:
+    app: digital-twin-engine
+    layer: "10"
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: digital-twin-engine
+  template:
+    metadata:
+      labels:
+        app: digital-twin-engine
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: digital-twin-engine
+          image: atlas-sanctum/digital-twin-engine:6.0.0
+          env:
+            - name: BIOMES_TARGET
+              value: "500"
+            - name: TWIN_UPDATE_INTERVAL_SECONDS
+              value: "300"   # Update every 5 minutes from satellite data
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: brokers
+            - name: SATELLITE_TOPIC
+              value: "biome.satellite.processed"
+            - name: CLIMATE_FORECAST_TOPIC
+              value: "climate.forecasts"
+            - name: POSTGIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: url
+            - name: WEAVIATE_URL
+              value: "http://weaviate.atlas-phase3:8080"
+            - name: SIMULATION_HORIZON_YEARS
+              value: "25"
+            - name: INTERVENTION_SCENARIOS
+              value: "reforestation,rewilding,carbon_farming,mangrove_restoration"
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 8Gi
+            limits:
+              cpu: 8000m
+              memory: 32Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: digital-twin-engine
+  namespace: atlas-phase6
+spec:
+  selector:
+    app: digital-twin-engine
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+# ─── RAY AUTOSCALER CONFIG (1M Agents) ────────────────────────────────────────
+# Phase 6: Ray cluster scales to 1M+ agents
+# Uses Kubernetes autoscaler + Ray's built-in actor scaling
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ray-autoscaler-config
+  namespace: atlas-phase6
+data:
+  autoscaler.yaml: |
+    cluster_name: atlas-sanctum-phase6
+    max_workers: 10000   # 10K worker pods × 100 actors each = 1M agents
+
+    provider:
+      type: kubernetes
+      namespace: atlas-phase6
+      autoscaler_service_account: ray-autoscaler-sa
+      autoscaler_role: ray-autoscaler-role
+      autoscaler_role_binding: ray-autoscaler-role-binding
+
+    available_node_types:
+      ray.worker.default:
+        resources:
+          CPU: 8
+          memory: 16000000000  # 16GB
+        node_config:
+          apiVersion: v1
+          kind: Pod
+          spec:
+            containers:
+              - name: ray-worker
+                image: atlas-sanctum/ray-agent-worker:6.0.0
+                resources:
+                  requests:
+                    cpu: 8000m
+                    memory: 16Gi
+                  limits:
+                    cpu: 16000m
+                    memory: 32Gi
+
+      ray.worker.gpu:
+        resources:
+          CPU: 8
+          GPU: 1
+          memory: 32000000000
+        node_config:
+          apiVersion: v1
+          kind: Pod
+          spec:
+            tolerations:
+              - key: nvidia.com/gpu
+                value: present
+                effect: NoSchedule
+            containers:
+              - name: ray-gpu-worker
+                image: atlas-sanctum/ray-agent-worker-gpu:6.0.0
+                resources:
+                  requests:
+                    cpu: 8000m
+                    memory: 32Gi
+                    nvidia.com/gpu: "1"
+
+    head_node_type: ray.head.default
+    upscaling_speed: 1.0
+    idle_timeout_minutes: 5
+
+---
+# ─── UN SDG REPORTING SERVICE ─────────────────────────────────────────────────
+# Generates automated SDG progress reports for UN submission
+# Integrates with: carbon validation, health metrics, governance data
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: un-sdg-reporter
+  namespace: atlas-phase6
+  labels:
+    app: un-sdg-reporter
+    layer: "10"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: un-sdg-reporter
+  template:
+    metadata:
+      labels:
+        app: un-sdg-reporter
+    spec:
+      containers:
+        - name: un-sdg-reporter
+          image: atlas-sanctum/un-sdg-reporter:6.0.0
+          env:
+            - name: UN_API_ENDPOINT
+              value: "https://unstats.un.org/sdgs/api/v1"
+            - name: UN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: un-api-credentials
+                  key: api-key
+            - name: REPORTING_SDGS
+              value: "1,2,3,6,7,11,13,14,15,16,17"   # Relevant SDGs
+            - name: CARBON_VALIDATION_URL
+              value: "http://governance-api.atlas-phase1:8080/api/carbon"
+            - name: HEALTH_METRICS_URL
+              value: "http://health-aggregator.atlas-phase2:8080"
+            - name: REPORT_FREQUENCY
+              value: "quarterly"
+            - name: BLOCKCHAIN_ANCHOR_REPORTS
+              value: "true"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+
+---
+# ─── REGENERATION-BACKED BOND MARKET ─────────────────────────────────────────
+# Issues and manages bonds backed by verified carbon sequestration
+# Coupons: 3.8%-6.5% based on ecological performance
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bond-market-service
+  namespace: atlas-phase6
+  labels:
+    app: bond-market-service
+    layer: "10"
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: bond-market-service
+  template:
+    metadata:
+      labels:
+        app: bond-market-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: bond-market
+          image: atlas-sanctum/bond-market:6.0.0
+          env:
+            - name: AURORA_URL
+              valueFrom:
+                secretKeyRef:
+                  name: aurora-financial-credentials
+                  key: url
+            - name: POLYGON_RPC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: blockchain-secrets
+                  key: polygon-rpc-url
+            - name: POLKADOT_RPC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: blockchain-secrets
+                  key: polkadot-rpc-url
+            - name: CARBON_VALIDATION_URL
+              value: "http://governance-api.atlas-phase1:8080/api/carbon"
+            - name: MIN_COUPON_RATE
+              value: "0.038"
+            - name: MAX_COUPON_RATE
+              value: "0.065"
+            - name: BOND_MATURITY_YEARS
+              value: "10"
+            - name: ETHICS_KERNEL_URL
+              value: "http://ethics-kernel.atlas-phase1:8080"
+            - name: AUDIT_TRAIL_IPFS
+              value: "true"
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 4Gi
+            limits:
+              cpu: 4000m
+              memory: 16Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+
+---
+# ─── POST-QUANTUM CRYPTOGRAPHY MIGRATION SERVICE ─────────────────────────────
+# Migrates all cryptographic operations to CRYSTALS-Kyber (KEM) + Dilithium (signatures)
+# NIST PQC standards — protects against quantum computer attacks
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pq-crypto-service
+  namespace: atlas-phase6
+  labels:
+    app: pq-crypto-service
+    layer: "9"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pq-crypto-service
+  template:
+    metadata:
+      labels:
+        app: pq-crypto-service
+    spec:
+      containers:
+        - name: pq-crypto
+          image: atlas-sanctum/pq-crypto-service:6.0.0
+          env:
+            - name: KEM_ALGORITHM
+              value: "CRYSTALS-Kyber-1024"   # NIST Level 5 security
+            - name: SIGNATURE_ALGORITHM
+              value: "CRYSTALS-Dilithium-5"
+            - name: HASH_ALGORITHM
+              value: "SHA3-512"
+            - name: MIGRATION_MODE
+              value: "hybrid"   # Run classical + PQ in parallel during migration
+            - name: VAULT_URL
+              value: "http://vault.atlas-phase1:8200"
+            - name: KEY_ROTATION_DAYS
+              value: "90"
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+            limits:
+              cpu: 4000m
+              memory: 8Gi
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pq-crypto-service
+  namespace: atlas-phase6
+spec:
+  selector:
+    app: pq-crypto-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+# ─── GLOBAL OBSERVABILITY — OPENTELEMETRY COLLECTOR ──────────────────────────
+# Aggregates traces, metrics, logs from all 6 phases across all regions
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-collector
+  namespace: monitoring
+  labels:
+    app: otel-collector
+spec:
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      serviceAccountName: otel-collector-sa
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.92.0
+          args:
+            - --config=/conf/otel-collector-config.yaml
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+            - name: prometheus
+              containerPort: 8888
+            - name: zpages
+              containerPort: 55679
+          resources:
+            requests:
+              cpu: 200m
+              memory: 400Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          volumeMounts:
+            - name: otel-config
+              mountPath: /conf
+      volumes:
+        - name: otel-config
+          configMap:
+            name: otel-collector-config
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: monitoring
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: 'atlas-sanctum-all-phases'
+              kubernetes_sd_configs:
+                - role: pod
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                  action: keep
+                  regex: true
+
+    processors:
+      batch:
+        timeout: 10s
+        send_batch_size: 1000
+      memory_limiter:
+        limit_mib: 1500
+        spike_limit_mib: 512
+      # Add Atlas Sanctum metadata to all telemetry
+      attributes:
+        actions:
+          - key: atlas.platform
+            value: "atlas-sanctum"
+            action: insert
+          - key: atlas.version
+            value: "6.0.0"
+            action: insert
+
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:8888"
+      # Grafana Cloud for global dashboard
+      otlp/grafana:
+        endpoint: "https://otlp-gateway-prod-us-central-0.grafana.net/otlp"
+        headers:
+          authorization: "${GRAFANA_CLOUD_TOKEN}"
+      # Jaeger for distributed tracing
+      jaeger:
+        endpoint: "jaeger-collector:14250"
+        tls:
+          insecure: true
+      # S3 for long-term trace storage
+      awss3:
+        s3uploader:
+          region: us-east-1
+          s3_bucket: atlas-phase6-traces
+          s3_prefix: "otel/"
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, attributes]
+          exporters: [otlp/grafana, jaeger, awss3]
+        metrics:
+          receivers: [otlp, prometheus]
+          processors: [memory_limiter, batch, attributes]
+          exporters: [prometheus, otlp/grafana]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, attributes]
+          exporters: [otlp/grafana, awss3]
+
+---
+# ─── PHASE 6 COMPREHENSIVE ALERT RULES ───────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: phase6-alert-rules
+  namespace: monitoring
+data:
+  phase6-rules.yaml: |
+    groups:
+      - name: atlas-phase6-planetary-sla
+        rules:
+          # 99.99% uptime SLA = max 52 minutes downtime/year
+          - alert: GlobalUptimeSLABreach
+            expr: |
+              (1 - avg_over_time(up{job=~"atlas-.*"}[1h])) > 0.0001
+            for: 5m
+            labels:
+              severity: critical
+              phase: "6"
+              sla: "99.99"
+            annotations:
+              summary: "PLANETARY SLA BREACH: Uptime below 99.99%"
+              description: "Availability: {{ $value | humanizePercentage }}"
+
+          - alert: AgentCountBelow1M
+            expr: ray_cluster_total_actors < 1000000
+            for: 30m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Active agents below 1M target"
+
+          - alert: DigitalTwinStaleness
+            expr: time() - digital_twin_last_update_timestamp > 600
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Digital twin not updated in > 10 minutes"
+
+          - alert: BlockchainAuditTrailGap
+            expr: increase(blockchain_anchor_failures_total[5m]) > 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Blockchain audit trail has gaps — compliance risk"
+
+          - alert: PostQuantumMigrationIncomplete
+            expr: pq_crypto_classical_operations_ratio > 0.05
+            for: 1h
+            labels:
+              severity: warning
+            annotations:
+              summary: "> 5% of crypto operations still using classical algorithms"
+
+          - alert: AIAlignmentDrift
+            expr: |
+              rate(ethics_violations_total[1h])
+              / rate(agent_actions_total[1h]) > 0.001
+            for: 10m
+            labels:
+              severity: critical
+              phase: "6"
+            annotations:
+              summary: "CRITICAL: AI alignment drift detected at planetary scale"
+              description: "Ethics violation rate: {{ $value | humanizePercentage }}. Engage human override."
+
+          - alert: KafkaGlobalLag
+            expr: sum(kafka_consumer_lag) > 10000000
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Global Kafka lag > 10M messages — event processing falling behind"
+
+          - alert: CarbonValidationBacklog
+            expr: carbon_validation_queue_depth > 1000
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Carbon validation queue backlog > 1000 projects"

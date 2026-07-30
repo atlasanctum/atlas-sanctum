@@ -1,0 +1,183 @@
+openapi: 3.0.3
+info:
+  title: Atlas Sanctum Phase 0 API
+  version: "0.1.0"
+servers:
+  - url: http://localhost:4000
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /api/auth/signup:
+    post:
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                displayName:
+                  type: string
+      responses:
+        '201':
+          description: Created
+  /api/auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: OK
+  /api/assets:
+    post:
+      summary: Create asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                type: { type: string }
+                metadata: { type: object }
+      responses:
+        '201': { description: Created }
+    get:
+      summary: List assets
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/assets/{id}:
+    get:
+      summary: Get asset
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/measurements:
+    post:
+      summary: Ingest measurement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assetId: { type: string }
+                source: { type: string }
+                timestamp: { type: string, format: date-time }
+                geo: { type: object }
+                metrics: { type: object }
+      responses:
+        '201': { description: Created }
+  /api/measurements/asset/{id}:
+    get:
+      summary: List measurements for asset
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/marketplace/listings:
+    get:
+      summary: List marketplace listings
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create listing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assetId: { type: string }
+                priceAmount: { type: number }
+      responses:
+        '201': { description: Created }
+  /api/marketplace/{id}/purchase:
+    post:
+      summary: Purchase listing
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                buyerId: { type: string }
+      responses:
+        '201': { description: Created }
+  /api/governance/proposals:
+    post:
+      summary: Create proposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                body: { type: string }
+                choices: { type: array, items: { type: string } }
+      responses:
+        '201': { description: Created }
+    get:
+      summary: List proposals
+      responses:
+        '200': { description: OK }
+  /api/governance/proposals/{id}/vote:
+    post:
+      summary: Vote on proposal
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                voterId: { type: string }
+                choice: { type: string }
+      responses:
+        '200': { description: OK }

@@ -1,0 +1,468 @@
+"""
+Atlas Sanctum GraphQL Schema
+The primary query interface for the Atlas Dashboard and external integrators.
+
+Follows the API-First principle declared in the README.
+All queries are read-only (CQRS read model).
+Mutations go through the REST API with constitutional pre-flight validation.
+"""
+
+# ─── Scalars ──────────────────────────────────────────────────────────────────
+
+scalar DateTime
+scalar JSON
+scalar GeoJSON
+
+# ─── Root Types ───────────────────────────────────────────────────────────────
+
+type Query {
+  # Planetary
+  planetaryMetrics: PlanetaryMetrics!
+  earthSystemsDashboard: EarthSystemsDashboard!
+
+  # Impact
+  impactProjects(
+    type: ImpactProjectType
+    status: ProjectStatus
+    bioregion: String
+    page: Int
+    pageSize: Int
+  ): ImpactProjectConnection!
+  impactProject(id: ID!): ImpactProject
+  regenerativeCredits(type: CreditType, verified: Boolean): [RegenerativeCredit!]!
+
+  # Governance
+  proposals(status: ProposalStatus, type: ProposalType): [GovernanceProposal!]!
+  proposal(id: ID!): GovernanceProposal
+  covenants(layer: CovenantLayer, status: CovenantStatus): [Covenant!]!
+  covenant(id: ID!): Covenant
+  constitutionalHealth: ConstitutionalHealth!
+
+  # AI
+  agents: [AgentStatus!]!
+  aiExplainability(actionId: ID!): ExplainabilityRecord
+
+  # Identity
+  profile(did: ID!): IdentityProfile
+  me: IdentityProfile
+
+  # Marketplace
+  listings(creditType: CreditType, verified: Boolean): [MarketplaceListing!]!
+  listing(id: ID!): MarketplaceListing
+
+  # Knowledge
+  knowledgeNodes(domain: String, type: KnowledgeNodeType): [KnowledgeNode!]!
+  researchPapers(domain: String): [ResearchPaper!]!
+}
+
+type Subscription {
+  planetaryMetricsUpdated: PlanetaryMetrics!
+  projectVerified(projectId: ID!): ImpactVerification!
+  proposalStatusChanged(proposalId: ID!): GovernanceProposal!
+  agentActionTaken(agentId: ID): AgentAction!
+}
+
+# ─── Planetary Types ──────────────────────────────────────────────────────────
+
+type PlanetaryMetrics {
+  timestamp: DateTime!
+  carbonBudgetRemainingGt: Float!
+  biodiversityIntactnessIndex: Float!
+  oceanHealthIndex: Float!
+  freshwaterStressIndex: Float!
+  humanFlourishingIndex: Float!
+  activeRestorationProjects: Int!
+  hectaresProtected: Float!
+  carbonVerificationRate: Float!
+  agentsOnline: Int!
+}
+
+type EarthSystemsDashboard {
+  climate: ClimateMetrics!
+  oceans: OceanMetrics!
+  biodiversity: BiodiversityMetrics!
+  freshwater: FreshwaterMetrics!
+  atmosphere: AtmosphereMetrics!
+  updatedAt: DateTime!
+}
+
+type ClimateMetrics {
+  globalTempAnomalyC: Float!
+  co2Ppm: Float!
+  carbonBudgetRemainingGt: Float!
+  arcticSeaIceExtentKm2: Float!
+}
+
+type OceanMetrics {
+  averageSurfaceTempC: Float!
+  acidificationLevel: Float!
+  plasticDensityIndex: Float!
+  coralBleachingRiskPct: Float!
+  fishBiomassIndex: Float!
+}
+
+type BiodiversityMetrics {
+  intactnessIndex: Float!
+  speciesAtRiskCount: Int!
+  protectedAreasPct: Float!
+  restorationProjectCount: Int!
+}
+
+type FreshwaterMetrics {
+  stressIndex: Float!
+  qualityIndex: Float!
+  accessPct: Float!
+}
+
+type AtmosphereMetrics {
+  aqi: Float!
+  methaneConcentration: Float!
+  nitrousOxideConcentration: Float!
+}
+
+# ─── Impact Types ─────────────────────────────────────────────────────────────
+
+type ImpactProjectConnection {
+  nodes: [ImpactProject!]!
+  total: Int!
+  hasMore: Boolean!
+}
+
+type ImpactProject {
+  id: ID!
+  name: String!
+  type: ImpactProjectType!
+  location: GeoLocation!
+  status: ProjectStatus!
+  carbonSequesteredTonnes: Float!
+  biodiversityScore: Float!
+  communitiesImpacted: Int!
+  verificationLevel: VerificationLevel!
+  verifications: [ImpactVerification!]!
+  credits: [RegenerativeCredit!]!
+  digitalTwin: DigitalTwin
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ImpactVerification {
+  id: ID!
+  projectId: ID!
+  verifier: String!
+  methodology: String!
+  sequestrationTonnes: Float!
+  confidence: Float!
+  satelliteEvidence: [String!]!
+  zkProofId: String
+  onChainRef: String
+  verifiedAt: DateTime!
+}
+
+type RegenerativeCredit {
+  id: ID!
+  type: CreditType!
+  projectId: ID!
+  amount: Float!
+  vintage: Int!
+  verified: Boolean!
+  price: Float
+  currency: String
+  retiredAt: DateTime
+}
+
+type DigitalTwin {
+  twinId: ID!
+  entityType: DigitalTwinEntityType!
+  currentState: JSON!
+  simulatedState: JSON
+  divergenceScore: Float!
+  lastSyncedAt: DateTime!
+}
+
+# ─── Governance Types ─────────────────────────────────────────────────────────
+
+type GovernanceProposal {
+  id: ID!
+  title: String!
+  description: String!
+  proposedBy: String!
+  type: ProposalType!
+  status: ProposalStatus!
+  affectedBioregions: [String!]!
+  sevenGenerationImpact: String!
+  votes: [GovernanceVote!]!
+  tally: GovernanceTally
+  votingDeadline: DateTime!
+  createdAt: DateTime!
+}
+
+type GovernanceVote {
+  voter: String!
+  vote: VoteChoice!
+  rationale: String
+  weight: Float!
+  castAt: DateTime!
+}
+
+type GovernanceTally {
+  yesWeight: Float!
+  noWeight: Float!
+  abstainWeight: Float!
+  quorumReached: Boolean!
+  supermajorityReached: Boolean!
+  outcome: TallyOutcome
+}
+
+type Covenant {
+  id: ID!
+  version: String!
+  layer: CovenantLayer!
+  participants: [String!]!
+  purpose: String!
+  obligations: [String!]!
+  permissions: [String!]!
+  status: CovenantStatus!
+  measurableOutcomes: [MeasurableOutcome!]!
+  auditHistory: [AuditRecord!]!
+  createdAt: DateTime!
+  expiresAt: DateTime
+}
+
+type MeasurableOutcome {
+  metric: String!
+  target: Float!
+  unit: String!
+  horizon: String!
+  currentValue: Float
+}
+
+type AuditRecord {
+  timestamp: DateTime!
+  auditor: String!
+  finding: String!
+  severity: AuditSeverity!
+  resolved: Boolean!
+}
+
+type ConstitutionalHealth {
+  constitutionalIntegrity: Float!
+  totalCovenants: Int!
+  activeCovenants: Int!
+  criticalViolations: Int!
+  pendingAppeals: Int!
+  unappliedLearnings: Int!
+  obligationFulfillmentRate: Float!
+}
+
+# ─── AI Types ─────────────────────────────────────────────────────────────────
+
+type AgentStatus {
+  agentId: ID!
+  role: String!
+  status: AgentStatusEnum!
+  lastActionAt: DateTime
+  ethicsScore: Float
+}
+
+type AgentAction {
+  actionId: ID!
+  agentId: ID!
+  type: String!
+  ethicalScore: Float
+  rationale: String
+  timestamp: DateTime!
+}
+
+type ExplainabilityRecord {
+  actionId: ID!
+  agentId: String!
+  decisionType: String!
+  plainLanguageSummary: String!
+  logicalSteps: [String!]!
+  evidenceUsed: [String!]!
+  alternativesConsidered: [String!]!
+  whyThisChoice: String!
+  affectedParties: [String!]!
+  appealDeadline: DateTime!
+  timestamp: DateTime!
+}
+
+# ─── Identity Types ───────────────────────────────────────────────────────────
+
+type IdentityProfile {
+  did: ID!
+  displayName: String!
+  role: IdentityRole!
+  verificationLevel: VerificationLevel!
+  covenantBindings: [String!]!
+  reputationScore: Float!
+  createdAt: DateTime!
+}
+
+# ─── Marketplace Types ────────────────────────────────────────────────────────
+
+type MarketplaceListing {
+  id: ID!
+  creditType: CreditType!
+  project: ImpactProject!
+  amount: Float!
+  pricePerUnit: Float!
+  currency: String!
+  vintage: Int!
+  verified: Boolean!
+  seller: String!
+  expiresAt: DateTime
+  createdAt: DateTime!
+}
+
+# ─── Knowledge Types ──────────────────────────────────────────────────────────
+
+type KnowledgeNode {
+  id: ID!
+  label: String!
+  type: KnowledgeNodeType!
+  domain: String!
+  properties: JSON!
+  relatedNodes: [KnowledgeNode!]!
+}
+
+type ResearchPaper {
+  id: ID!
+  title: String!
+  authors: [String!]!
+  domain: String!
+  abstract: String!
+  publishedAt: DateTime!
+  license: String!
+  url: String
+}
+
+# ─── Shared Types ─────────────────────────────────────────────────────────────
+
+type GeoLocation {
+  lat: Float!
+  lng: Float!
+  region: String
+  bioregion: String
+}
+
+# ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum ImpactProjectType {
+  REFORESTATION
+  OCEAN_RESTORATION
+  SOIL_REGENERATION
+  BIODIVERSITY
+  COMMUNITY
+  RENEWABLE_ENERGY
+  WATER_CONSERVATION
+}
+
+enum ProjectStatus {
+  ACTIVE
+  VERIFIED
+  COMPLETED
+  PENDING
+}
+
+enum CreditType {
+  CARBON
+  BIODIVERSITY
+  WATER
+  OCEAN
+  COMMUNITY
+  HEALTHCARE
+  CIRCULAR_ECONOMY
+}
+
+enum VerificationLevel {
+  SELF_REPORTED
+  THIRD_PARTY
+  ORACLE_VERIFIED
+  MULTI_SOURCE
+}
+
+enum ProposalType {
+  POLICY
+  CONSTITUTIONAL_AMENDMENT
+  RESOURCE_ALLOCATION
+  PARTNERSHIP
+}
+
+enum ProposalStatus {
+  DRAFT
+  DELIBERATION
+  VOTING
+  PASSED
+  REJECTED
+  VETOED
+}
+
+enum CovenantLayer {
+  CREATION
+  PRESERVATION
+  MULTIPLICATION
+  JUSTICE
+  LEADERSHIP
+  RENEWAL
+}
+
+enum CovenantStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  AMENDED
+  TERMINATED
+}
+
+enum VoteChoice {
+  YES
+  NO
+  ABSTAIN
+}
+
+enum TallyOutcome {
+  PASSED
+  REJECTED
+  PENDING
+}
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  VIOLATION
+  CRITICAL
+}
+
+enum AgentStatusEnum {
+  IDLE
+  ACTIVE
+  DELIBERATING
+  BLOCKED
+  ERROR
+}
+
+enum IdentityRole {
+  INDIVIDUAL
+  ORGANIZATION
+  INSTITUTION
+  AI_AGENT
+  COMMUNITY
+}
+
+enum KnowledgeNodeType {
+  CONCEPT
+  ENTITY
+  RELATION
+  AXIOM
+  RULE
+}
+
+enum DigitalTwinEntityType {
+  BIOME
+  CITY
+  WATERSHED
+  OCEAN
+  ATMOSPHERE
+}

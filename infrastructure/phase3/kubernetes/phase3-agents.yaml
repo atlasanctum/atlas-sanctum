@@ -1,0 +1,585 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# ATLAS SANCTUM — PHASE 3: MULTI-AGENT CIVILIZATION ENGINE
+# Ray Cluster | 12 Agents | Weaviate | LangGraph | IPFS | Memory Fabric
+# Months 6–12 | Targets: 12 agents, <500ms coordination, >99% ethics compliance
+# ═══════════════════════════════════════════════════════════════════════════════
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atlas-phase3
+  labels:
+    phase: "3"
+    istio-injection: enabled
+
+---
+# ─── RAY CLUSTER — HEAD NODE ──────────────────────────────────────────────────
+# Ray is the distributed execution engine for all 12 civilization agents
+# Head node: manages cluster state, task scheduling, actor registry
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ray-head
+  namespace: atlas-phase3
+  labels:
+    app: ray-head
+    component: ray-cluster
+spec:
+  replicas: 1   # Head node is single — HA via Ray's built-in fault tolerance
+  selector:
+    matchLabels:
+      app: ray-head
+  template:
+    metadata:
+      labels:
+        app: ray-head
+        component: ray-cluster
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: ray-sa
+      containers:
+        - name: ray-head
+          image: rayproject/ray:2.9.0-py311
+          command:
+            - ray
+            - start
+            - --head
+            - --port=6379
+            - --dashboard-host=0.0.0.0
+            - --dashboard-port=8265
+            - --metrics-export-port=8080
+            - --num-cpus=4
+            - --num-gpus=0
+            - --block
+          env:
+            - name: RAY_DISABLE_IMPORT_WARNING
+              value: "1"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ray-redis-credentials
+                  key: password
+          ports:
+            - name: gcs
+              containerPort: 6379
+            - name: dashboard
+              containerPort: 8265
+            - name: metrics
+              containerPort: 8080
+            - name: client
+              containerPort: 10001
+          resources:
+            requests:
+              cpu: 4000m
+              memory: 8Gi
+            limits:
+              cpu: 8000m
+              memory: 16Gi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8265
+            initialDelaySeconds: 30
+            periodSeconds: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ray-head
+  namespace: atlas-phase3
+spec:
+  selector:
+    app: ray-head
+  ports:
+    - name: gcs
+      port: 6379
+      targetPort: 6379
+    - name: dashboard
+      port: 8265
+      targetPort: 8265
+    - name: client
+      port: 10001
+      targetPort: 10001
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+
+---
+# ─── RAY WORKER NODES ─────────────────────────────────────────────────────────
+# Each worker runs multiple agent actors
+# Phase 3: 12 agents across 6 workers (2 agents/worker)
+# Phase 6: scales to 1M agents via Ray autoscaler
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ray-worker
+  namespace: atlas-phase3
+  labels:
+    app: ray-worker
+    component: ray-cluster
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: ray-worker
+  template:
+    metadata:
+      labels:
+        app: ray-worker
+        component: ray-cluster
+    spec:
+      containers:
+        - name: ray-worker
+          image: rayproject/ray:2.9.0-py311
+          command:
+            - ray
+            - start
+            - --address=ray-head:6379
+            - --num-cpus=4
+            - --num-gpus=0
+            - --block
+          env:
+            - name: RAY_DISABLE_IMPORT_WARNING
+              value: "1"
+          resources:
+            requests:
+              cpu: 4000m
+              memory: 8Gi
+            limits:
+              cpu: 8000m
+              memory: 16Gi
+
+---
+# ─── RAY HPA (scales workers based on pending tasks) ─────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ray-worker
+  namespace: atlas-phase3
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ray-worker
+  minReplicas: 6
+  maxReplicas: 100   # Phase 6: 1000+
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: ray_pending_tasks_total
+        target:
+          type: AverageValue
+          averageValue: "10"
+
+---
+# ─── LANGGRAPH ORCHESTRATOR ───────────────────────────────────────────────────
+# Manages agent workflow graphs: which agents run in sequence vs parallel
+# Implements the coordinate() pipeline from Layer7_MultiAgentCivilization.ts
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langgraph-orchestrator
+  namespace: atlas-phase3
+  labels:
+    app: langgraph-orchestrator
+    layer: "7"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: langgraph-orchestrator
+  template:
+    metadata:
+      labels:
+        app: langgraph-orchestrator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: langgraph-orchestrator
+          image: atlas-sanctum/langgraph-orchestrator:3.0.0
+          env:
+            - name: RAY_ADDRESS
+              value: "ray://ray-head:10001"
+            - name: ETHICS_KERNEL_URL
+              value: "http://ethics-kernel.atlas-phase1:8080"
+            - name: WEAVIATE_URL
+              value: "http://weaviate:8080"
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: brokers
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-credentials
+                  key: openai-api-key
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-credentials
+                  key: anthropic-api-key
+            - name: AGENT_COORDINATION_TIMEOUT_MS
+              value: "500"   # <500ms target from roadmap
+            - name: ETHICS_CHECK_REQUIRED
+              value: "true"
+            - name: HUMAN_OVERRIDE_ENABLED
+              value: "true"
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+            limits:
+              cpu: 4000m
+              memory: 8Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langgraph-orchestrator
+  namespace: atlas-phase3
+spec:
+  selector:
+    app: langgraph-orchestrator
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+# ─── WEAVIATE VECTOR STORE ────────────────────────────────────────────────────
+# Civilization memory: agent memories, biome embeddings, policy documents
+# Target: 1B+ vectors, HNSW index, hybrid search
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: weaviate
+  namespace: atlas-phase3
+  labels:
+    app: weaviate
+    layer: "8"
+spec:
+  serviceName: weaviate
+  replicas: 3   # Distributed Weaviate cluster
+  selector:
+    matchLabels:
+      app: weaviate
+  template:
+    metadata:
+      labels:
+        app: weaviate
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "2112"
+    spec:
+      containers:
+        - name: weaviate
+          image: semitechnologies/weaviate:1.24.0
+          env:
+            - name: QUERY_DEFAULTS_LIMIT
+              value: "100"
+            - name: AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED
+              value: "false"
+            - name: AUTHENTICATION_APIKEY_ENABLED
+              value: "true"
+            - name: AUTHENTICATION_APIKEY_ALLOWED_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: weaviate-credentials
+                  key: api-keys
+            - name: PERSISTENCE_DATA_PATH
+              value: "/var/lib/weaviate"
+            - name: DEFAULT_VECTORIZER_MODULE
+              value: "text2vec-openai"
+            - name: ENABLE_MODULES
+              value: "text2vec-openai,text2vec-cohere,generative-openai,qna-openai"
+            - name: OPENAI_APIKEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-credentials
+                  key: openai-api-key
+            - name: CLUSTER_HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CLUSTER_GOSSIP_BIND_PORT
+              value: "7100"
+            - name: CLUSTER_DATA_BIND_PORT
+              value: "7101"
+            - name: PROMETHEUS_MONITORING_ENABLED
+              value: "true"
+            - name: PROMETHEUS_MONITORING_PORT
+              value: "2112"
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 50051
+            - name: metrics
+              containerPort: 2112
+            - name: gossip
+              containerPort: 7100
+            - name: data
+              containerPort: 7101
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 8Gi
+            limits:
+              cpu: 8000m
+              memory: 32Gi
+          livenessProbe:
+            httpGet:
+              path: /v1/.well-known/live
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /v1/.well-known/ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: weaviate-data
+              mountPath: /var/lib/weaviate
+  volumeClaimTemplates:
+    - metadata:
+        name: weaviate-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 500Gi   # Phase 3: 500GB; Phase 6: scale to 10TB+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: weaviate
+  namespace: atlas-phase3
+spec:
+  selector:
+    app: weaviate
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+
+---
+# ─── WEAVIATE SCHEMA INIT JOB ─────────────────────────────────────────────────
+# Creates the civilization memory schema on first deploy
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: weaviate-schema-init
+  namespace: atlas-phase3
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: schema-init
+          image: atlas-sanctum/weaviate-schema-init:3.0.0
+          env:
+            - name: WEAVIATE_URL
+              value: "http://weaviate:8080"
+            - name: WEAVIATE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: weaviate-credentials
+                  key: admin-api-key
+          command:
+            - python
+            - /app/init_schema.py
+          # Schema init script creates these classes:
+          # - AgentMemory: agent_id, role, content, timestamp, importance_score
+          # - BiomeEmbedding: biome_id, ndvi, carbon_density, biodiversity_index
+          # - PolicyDocument: jurisdiction, content, language, effective_date
+          # - IndigenousKnowledge: community, domain, content (sovereignty-protected)
+          # - CarbonProject: project_id, methodology, tonnes, confidence
+
+---
+# ─── IPFS NODE (Decentralized storage for immutable records) ──────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ipfs
+  namespace: atlas-phase3
+  labels:
+    app: ipfs
+spec:
+  serviceName: ipfs
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ipfs
+  template:
+    metadata:
+      labels:
+        app: ipfs
+    spec:
+      containers:
+        - name: ipfs
+          image: ipfs/kubo:v0.26.0
+          env:
+            - name: IPFS_PROFILE
+              value: "server"
+          ports:
+            - name: swarm
+              containerPort: 4001
+            - name: api
+              containerPort: 5001
+            - name: gateway
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: 2000m
+              memory: 8Gi
+          volumeMounts:
+            - name: ipfs-data
+              mountPath: /data/ipfs
+  volumeClaimTemplates:
+    - metadata:
+        name: ipfs-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 200Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ipfs
+  namespace: atlas-phase3
+spec:
+  selector:
+    app: ipfs
+  ports:
+    - name: api
+      port: 5001
+      targetPort: 5001
+    - name: gateway
+      port: 8080
+      targetPort: 8080
+
+---
+# ─── AGENT MEMORY CONSOLIDATION CRONJOB ──────────────────────────────────────
+# Runs every hour: consolidates agent short-term memory → Weaviate long-term
+# Target: >1,000 memories/hour from roadmap
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: memory-consolidation
+  namespace: atlas-phase3
+spec:
+  schedule: "0 * * * *"   # Every hour
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: memory-consolidator
+              image: atlas-sanctum/memory-consolidator:3.0.0
+              env:
+                - name: WEAVIATE_URL
+                  value: "http://weaviate:8080"
+                - name: REDIS_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: redis-credentials
+                      key: url
+                - name: IPFS_API_URL
+                  value: "http://ipfs:5001"
+                - name: CONSOLIDATION_BATCH_SIZE
+                  value: "100"
+                - name: IMPORTANCE_THRESHOLD
+                  value: "0.6"
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 1Gi
+                limits:
+                  cpu: 2000m
+                  memory: 4Gi
+
+---
+# ─── PHASE 3 ALERT RULES ──────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: phase3-alert-rules
+  namespace: atlas-phase3
+data:
+  phase3-rules.yaml: |
+    groups:
+      - name: atlas-phase3-agents
+        rules:
+          - alert: EthicsComplianceBelow99Pct
+            expr: |
+              rate(agent_ethics_violations_total[1h])
+              / rate(agent_actions_total[1h]) > 0.01
+            for: 5m
+            labels:
+              severity: critical
+              phase: "3"
+            annotations:
+              summary: "Agent ethics compliance below 99%"
+              description: "CRITICAL: Ethics violation rate {{ $value | humanizePercentage }}"
+
+          - alert: AgentCoordinationLatencyHigh
+            expr: histogram_quantile(0.95, rate(agent_coordination_duration_seconds_bucket[5m])) > 0.5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Agent coordination p95 > 500ms"
+
+          - alert: RayClusterUnhealthy
+            expr: ray_cluster_active_nodes < 3
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Ray cluster has fewer than 3 active nodes"
+
+          - alert: WeaviateMemoryPressure
+            expr: weaviate_objects_total > 900000000
+            for: 1m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Weaviate approaching 1B vector limit — scale storage"
+
+          - alert: MemoryConsolidationFailed
+            expr: kube_job_failed{job_name=~"memory-consolidation.*"} > 0
+            for: 1m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Agent memory consolidation job failed"

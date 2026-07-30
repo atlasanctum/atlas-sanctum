@@ -1,0 +1,71 @@
+name: Feature Request
+description: Propose a new feature or improvement
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for proposing a feature. For large architectural changes, consider opening a GitHub Discussion or RFC first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem does this feature solve? Who is affected?
+      placeholder: "As a [type of user], I need [capability] because [reason]."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the feature you'd like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider? Why is your proposal better?
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Roadmap phase
+      description: Which roadmap phase does this align with?
+      options:
+        - Phase 1 — Foundation
+        - Phase 2 — Intelligence Expansion
+        - Phase 3 — Advanced Capabilities
+        - Phase 4 — Global Ecosystem
+        - Future / Not on roadmap
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Expected impact
+      options:
+        - Critical — blocks core use cases
+        - High — significantly improves the platform
+        - Medium — nice to have
+        - Low — minor improvement
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, examples from other platforms, research links, etc.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: This aligns with Atlas Sanctum's regenerative mission
+          required: true

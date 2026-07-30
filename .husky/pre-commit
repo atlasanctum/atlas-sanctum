@@ -1,0 +1,15 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# 1. Targeted safe auto-fixes for no-unsafe-* (catch bindings) on staged files.
+#    Also chains `eslint --fix` for auto-fixable rules (unused-imports, etc.).
+node scripts/eslint-safe-autofix.mjs
+
+# 2. Re-stage any files the safe-autofix pass rewrote so they land in the commit.
+CHANGED=$(git diff --name-only --diff-filter=ACMR -- 'src/*.ts' 'src/*.tsx' 'src/**/*.ts' 'src/**/*.tsx')
+if [ -n "$CHANGED" ]; then
+  echo "$CHANGED" | xargs git add
+fi
+
+# 3. Standard lint-staged pass (prettier + eslint --fix on staged files).
+npx --no-install lint-staged

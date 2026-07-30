@@ -1,0 +1,22 @@
+groups:
+  - name: atlas-alerts
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          increase(atlas_http_requests_total{status=~"5.."}[5m])
+          / increase(atlas_http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: High rate of 5xx responses (>5% over 5m)
+          description: "{{ $labels.instance }}: >5% of requests are 5xx over the last 5 minutes."
+
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, sum(rate(atlas_http_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: High p95 request latency (>1s)
+          description: "{{ $labels.instance }}: p95 request latency is > 1s over the last 5 minutes."

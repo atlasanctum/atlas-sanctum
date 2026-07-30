@@ -1,0 +1,70 @@
+# CODEOWNERS
+#
+# Each line is a file pattern followed by one or more owners.
+# Owners are automatically requested for review when someone opens a PR
+# that modifies matching files.
+#
+# Order matters — the last matching pattern takes precedence.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default — core team reviews everything
+* @atlas-sanctum/core
+
+# Governance and community health files — steering committee
+/GOVERNANCE.md          @atlas-sanctum/steering
+/CODE_OF_CONDUCT.md     @atlas-sanctum/steering
+/LICENSE                @atlas-sanctum/steering
+/LICENSE.md             @atlas-sanctum/steering
+
+# Security-sensitive files — security team
+/SECURITY.md                        @atlas-sanctum/security
+/supabase/migrations/               @atlas-sanctum/security
+/database/migrations/               @atlas-sanctum/security
+/backend/src/middleware/            @atlas-sanctum/security
+/.github/workflows/                 @atlas-sanctum/security @atlas-sanctum/core
+
+# AI and intelligence layer — AI team
+/src/sanctum-ai/                    @atlas-sanctum/ai
+/src/lib/agents/                    @atlas-sanctum/ai
+/backend/src/agents/                @atlas-sanctum/ai
+/ai-services-backup/                @atlas-sanctum/ai
+
+# Frontend and UI — frontend team
+/src/components/                    @atlas-sanctum/frontend
+/src/pages/                         @atlas-sanctum/frontend
+/src/hooks/                         @atlas-sanctum/frontend
+/src/contexts/                      @atlas-sanctum/frontend
+/tailwind.config.ts                 @atlas-sanctum/frontend
+/src/index.css                      @atlas-sanctum/frontend
+
+# Backend API — backend team
+/backend/src/routes/                @atlas-sanctum/backend
+/backend/src/services/              @atlas-sanctum/backend
+/openapi.yaml                       @atlas-sanctum/backend
+/docs/openapi.yaml                  @atlas-sanctum/backend
+
+# Blockchain — blockchain team
+/chain/                             @atlas-sanctum/blockchain
+/src/cardano/                       @atlas-sanctum/blockchain
+/src/backend/cardano/               @atlas-sanctum/blockchain
+/atlas-sanctum/contracts/           @atlas-sanctum/blockchain
+
+# Infrastructure — devops team
+/infrastructure/                    @atlas-sanctum/devops
+/Dockerfile                         @atlas-sanctum/devops
+/Dockerfile.production              @atlas-sanctum/devops
+/docker-compose*.yml                @atlas-sanctum/devops
+/.github/workflows/                 @atlas-sanctum/devops
+
+# Documentation — documentation team
+/docs/                              @atlas-sanctum/docs
+/README.md                          @atlas-sanctum/docs @atlas-sanctum/core
+/ARCHITECTURE.md                    @atlas-sanctum/docs @atlas-sanctum/core
+/CONTRIBUTING.md                    @atlas-sanctum/docs @atlas-sanctum/core
+/CHANGELOG.md                       @atlas-sanctum/docs
+
+# Cryptography — security team (extra scrutiny)
+/src/crypto/                        @atlas-sanctum/security @atlas-sanctum/core
+/src/architecture/AtlasSanctumCryptography.ts   @atlas-sanctum/security
+/src/architecture/AtlasSanctumZeroKnowledge.ts  @atlas-sanctum/security
+/src/architecture/AtlasSanctumMPC.ts            @atlas-sanctum/security

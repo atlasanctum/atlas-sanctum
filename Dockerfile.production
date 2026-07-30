@@ -1,0 +1,163 @@
+# Atlas Genesis - Production Docker Configuration
+# Multi-stage build for optimized production deployment
+
+# ============================================
+# Stage 1: Frontend Build
+# ============================================
+FROM node:18-alpine AS frontend-builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig*.json ./
+COPY vite.config.ts ./
+COPY tailwind.config.ts ./
+COPY postcss.config.js ./
+COPY components.json ./
+
+# Install dependencies
+RUN npm ci --only=production=false
+
+# Copy source code
+COPY src/ ./src/
+COPY public/ ./public/
+COPY index.html ./
+
+# Build frontend
+RUN npm run build
+
+# ============================================
+# Stage 2: Backend Build
+# ============================================
+FROM node:18-alpine AS backend-builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy backend package files
+COPY backend/package*.json ./
+COPY backend/tsconfig.json ./
+
+# Install dependencies
+RUN npm ci --only=production=false
+
+# Copy backend source
+COPY backend/src/ ./src/
+
+# Build backend
+RUN npm run build
+
+# ============================================
+# Stage 3: Production Runtime
+# ============================================
+FROM node:18-alpine AS production
+
+# Install system dependencies
+RUN apk add --no-cache \
+    postgresql-client \
+    curl \
+    dumb-init
+
+# Create app user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S atlas -u 1001
+
+# Set working directory
+WORKDIR /app
+
+# Copy backend production files
+COPY --from=backend-builder /app/dist ./backend/
+COPY --from=backend-builder /app/package*.json ./backend/
+
+# Copy frontend build
+COPY --from=frontend-builder /app/dist ./frontend/
+
+# Install only production dependencies for backend
+WORKDIR /app/backend
+RUN npm ci --only=production && npm cache clean --force
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/uploads /app/backups
+RUN chown -R atlas:nodejs /app
+
+# Switch to non-root user
+USER atlas
+
+# Expose ports
+EXPOSE 3001 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3001/health || exit 1
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the application
+CMD ["node", "index.js"]
+
+# ============================================
+# Development Docker Configuration
+# ============================================
+FROM node:18-alpine AS development
+
+# Install system dependencies
+RUN apk add --no-cache \
+    postgresql-client \
+    curl \
+    git
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY backend/package*.json ./backend/
+
+# Install all dependencies (including dev)
+RUN npm install
+RUN cd backend && npm install
+
+# Copy source code
+COPY . .
+
+# Expose ports for development
+EXPOSE 3001 8080 5173
+
+# Development command
+CMD ["npm", "run", "dev:full"]
+
+# ============================================
+# Nginx Frontend-Only Image
+# ============================================
+FROM nginx:alpine AS frontend-only
+
+# Copy frontend build
+COPY --from=frontend-builder /app/dist /usr/share/nginx/html
+
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Create nginx user
+RUN addgroup -g 1001 -S nginx-app
+RUN adduser -S nginx-app -u 1001
+
+# Set permissions
+RUN chown -R nginx-app:nginx-app /usr/share/nginx/html
+RUN chown -R nginx-app:nginx-app /var/cache/nginx
+RUN chown -R nginx-app:nginx-app /var/log/nginx
+
+# Switch to non-root user
+USER nginx-app
+
+# Expose port
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/ || exit 1
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

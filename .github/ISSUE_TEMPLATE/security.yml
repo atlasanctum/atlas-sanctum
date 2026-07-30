@@ -1,0 +1,27 @@
+name: Security Vulnerability
+description: ⚠️ DO NOT use this template — see instructions below
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠️ Stop — Do Not Report Security Vulnerabilities Here
+
+        Public GitHub issues are visible to everyone, including attackers. Reporting a vulnerability here could put users at risk before a fix is available.
+
+        ### How to Report a Security Vulnerability
+
+        **Option 1 — GitHub Private Reporting (preferred):**
+        Use GitHub's built-in private advisory system:
+        [Report a vulnerability privately →](https://github.com/AtlasSanctum/atlas-sanctum/security/advisories/new)
+
+        **Option 2 — Email:**
+        Send details to **security@atlassanctum.org**
+
+        We will acknowledge your report within 48 hours and keep you updated throughout the process.
+
+        See [SECURITY.md](../SECURITY.md) for our full disclosure policy and response timelines.
+
+        ---
+
+        **If you are not reporting a security vulnerability**, please close this and use the Bug Report template instead.

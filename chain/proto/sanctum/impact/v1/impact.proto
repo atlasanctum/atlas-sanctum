@@ -1,0 +1,72 @@
+syntax = "proto3";
+package sanctum.impact.v1;
+
+option go_package = "github.com/atlashumanitarian/sanctum/x/impact/types";
+
+import "gogoproto/gogo.proto";
+
+enum ImpactStatus {
+  IMPACT_STATUS_UNSPECIFIED = 0;
+  IMPACT_STATUS_PENDING     = 1;
+  IMPACT_STATUS_VERIFIED    = 2;
+  IMPACT_STATUS_REJECTED    = 3;
+}
+
+enum ImpactType {
+  IMPACT_TYPE_UNSPECIFIED = 0;
+  IMPACT_TYPE_HEALTH      = 1;
+  IMPACT_TYPE_CLIMATE     = 2;
+  IMPACT_TYPE_BIODIVERSITY = 3;
+  IMPACT_TYPE_WATER       = 4;
+}
+
+message ImpactRecord {
+  string       id                   = 1;
+  string       provider             = 2;
+  ImpactType   type                 = 3;
+  string       metric               = 4;
+  string       value                = 5 [(gogoproto.customtype) = "cosmossdk.io/math.LegacyDec", (gogoproto.nullable) = false];
+  ImpactStatus status               = 6;
+  uint64       oracle_confirmations = 7;
+  int64        timestamp            = 8;
+  repeated string confirming_oracles = 9;
+}
+
+message MsgSubmitImpact {
+  string     provider = 1;
+  ImpactType type     = 2;
+  string     metric   = 3;
+  string     value    = 4 [(gogoproto.customtype) = "cosmossdk.io/math.LegacyDec", (gogoproto.nullable) = false];
+}
+
+message MsgSubmitImpactResponse { string id = 1; }
+
+message MsgVerifyImpact {
+  string oracle    = 1;
+  string impact_id = 2;
+}
+
+message MsgVerifyImpactResponse { bool verified = 1; }
+
+message MsgRejectImpact {
+  string oracle    = 1;
+  string impact_id = 2;
+  string reason    = 3;
+}
+
+message MsgRejectImpactResponse {}
+
+message QueryImpactRequest  { string id = 1; }
+message QueryImpactResponse { ImpactRecord record = 1; }
+
+message QueryImpactsByStatusRequest  { ImpactStatus status = 1; }
+message QueryImpactsByStatusResponse { repeated ImpactRecord records = 1; }
+
+message QueryImpactsByProviderRequest  { string provider = 1; }
+message QueryImpactsByProviderResponse { repeated ImpactRecord records = 1; }
+
+message GenesisState { repeated ImpactRecord records = 1; }
+
+message EventImpactSubmitted { string id = 1; string provider = 2; }
+message EventImpactVerified  { string id = 1; uint64 confirmations = 2; }
+message EventImpactRejected  { string id = 1; string oracle = 2; string reason = 3; }

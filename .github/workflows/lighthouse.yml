@@ -1,0 +1,68 @@
+name: Lighthouse CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run Lighthouse CI
+        run: npm run lighthouse:ci
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+      - name: Format Lighthouse results
+        run: |
+          echo "## Lighthouse Performance Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f .lighthouseci/results.json ]; then
+            node -e "
+              const fs = require('fs');
+              const results = JSON.parse(fs.readFileSync('.lighthouseci/results.json', 'utf8'));
+              results.forEach(result => {
+                const url = result.url;
+                const performance = result.summary?.performance || 0;
+                const accessibility = result.summary?.accessibility || 0;
+                const bestPractices = result.summary?.['best-practices'] || 0;
+                const seo = result.summary?.seo || 0;
+                console.log(\`### \${url}\`);
+                console.log(\`- Performance: \${(performance * 100).toFixed(1)}/100\`);
+                console.log(\`- Accessibility: \${(accessibility * 100).toFixed(1)}/100\`);
+                console.log(\`- Best Practices: \${(bestPractices * 100).toFixed(1)}/100\`);
+                console.log(\`- SEO: \${(seo * 100).toFixed(1)}/100\`);
+                console.log('');
+              });
+            " >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No Lighthouse results found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload Lighthouse report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-report
+          path: |
+            .lighthouseci/
+            lighthouseci-results.html
+          retention-days: 30

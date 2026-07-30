@@ -1,0 +1,168 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Build · Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: ESLint warning baseline (no regressions)
+        run: npm run lint:baseline
+
+      - name: ESLint grouped-by-rule report
+        if: always()
+        run: npm run lint:report
+
+      - name: Upload ESLint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eslint-report-${{ github.run_id }}
+          path: |
+            eslint-report.md
+            eslint-report.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: ESLint trend (append snapshot + regenerate table)
+        if: always()
+        env:
+          TREND_COMMIT: ${{ github.sha }}
+          TREND_REF: ${{ github.ref_name }}
+        run: npm run lint:trend
+
+      - name: ESLint no-unsafe-* prioritized checklist
+        if: always()
+        run: npm run lint:checklist
+
+      - name: Upload ESLint trend + checklist
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eslint-trend-${{ github.run_id }}
+          path: |
+            eslint-trend.csv
+            eslint-trend.md
+            eslint-unsafe-checklist.md
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: ESLint PR delta comment
+        if: github.event_name == 'pull_request' && always()
+        run: npm run lint:pr-comment
+
+      - name: Post PR comment with warning deltas
+        if: github.event_name == 'pull_request' && always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: eslint-warning-deltas
+          path: eslint-pr-comment.md
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Vite production build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: RLS test suite
+        run: npx vitest run src/test/rls.test.ts
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Newsletter race-condition test
+        run: npx vitest run src/test/newsletter-race.test.ts src/test/newsletter-window-boundaries.test.ts
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Install puppeteer for smoke test
+        run: npm install --no-save puppeteer
+
+      - name: Start preview server
+        run: |
+          npx vite preview --port 4173 &
+          npx wait-on http://localhost:4173
+
+      - name: Route smoke test
+        run: npm run smoke -- http://localhost:4173
+
+      - name: Playwright — newsletter abuse protections
+        id: pw_protections
+        run: npx playwright install --with-deps chromium && E2E_BASE_URL=http://localhost:4173 npx playwright test e2e/newsletter-protections.spec.ts
+
+      - name: Playwright — newsletter visual regression
+        id: pw_visual
+        run: E2E_BASE_URL=http://localhost:4173 npx playwright test e2e/newsletter-visual.spec.ts
+
+      - name: Playwright — newsletter inline error states
+        id: pw_inline
+        run: E2E_BASE_URL=http://localhost:4173 npx playwright test e2e/newsletter-inline-errors.spec.ts
+
+      - name: Playwright — admin newsletter access control
+        id: pw_admin_access
+        run: E2E_BASE_URL=http://localhost:4173 npx playwright test e2e/admin-newsletter-access.spec.ts
+
+      - name: Playwright — admin newsletter CSV export
+        id: pw_admin_export
+        run: E2E_BASE_URL=http://localhost:4173 npx playwright test e2e/admin-newsletter-export.spec.ts
+
+      - name: Upload Playwright report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  security-scan:
+    name: Supabase security scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run Supabase linter
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::warning::SUPABASE_ACCESS_TOKEN / SUPABASE_PROJECT_REF not set — skipping linter."
+            exit 0
+          fi
+          npx -y supabase@latest db lint --project-ref "$SUPABASE_PROJECT_REF" --linked --level error > lint.txt 2>&1 || true
+          cat lint.txt
+          # Fail only on ERROR-level findings; warnings are reported but non-blocking.
+          if grep -Eiq "level:[[:space:]]*error" lint.txt; then
+            echo "::error::High-risk Supabase security findings detected"
+            exit 1
+          fi

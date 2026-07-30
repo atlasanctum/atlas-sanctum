@@ -1,0 +1,81 @@
+syntax = "proto3";
+package sanctum.identity.v1;
+
+option go_package = "github.com/atlashumanitarian/sanctum/x/identity/types";
+
+import "cosmos/base/v1beta1/coin.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_USER        = 1;
+  ROLE_CLINIC      = 2;
+  ROLE_ORACLE      = 3;
+  ROLE_VALIDATOR   = 4;
+  ROLE_PARTNER     = 5;
+  ROLE_ADMIN       = 6;
+}
+
+// ─── Core Types ──────────────────────────────────────────────────────────────
+
+message User {
+  string address          = 1;
+  Role   role             = 2;
+  string reputation_score = 3 [(gogoproto.customtype) = "cosmossdk.io/math.LegacyDec", (gogoproto.nullable) = false];
+  string metadata         = 4;
+  int64  registered_at    = 5;
+}
+
+// ─── Messages ────────────────────────────────────────────────────────────────
+
+message MsgRegisterUser {
+  string address  = 1;
+  Role   role     = 2;
+  string metadata = 3;
+}
+
+message MsgRegisterUserResponse {}
+
+message MsgUpdateReputation {
+  string admin   = 1;
+  string address = 2;
+  string delta   = 3 [(gogoproto.customtype) = "cosmossdk.io/math.LegacyDec", (gogoproto.nullable) = false];
+}
+
+message MsgUpdateReputationResponse {}
+
+message MsgUpdateMetadata {
+  string address  = 1;
+  string metadata = 2;
+}
+
+message MsgUpdateMetadataResponse {}
+
+// ─── Queries ─────────────────────────────────────────────────────────────────
+
+message QueryUserRequest  { string address = 1; }
+message QueryUserResponse { User user = 1; }
+
+message QueryUsersByRoleRequest  { Role role = 1; }
+message QueryUsersByRoleResponse { repeated User users = 1; }
+
+// ─── Genesis ─────────────────────────────────────────────────────────────────
+
+message GenesisState {
+  repeated User users = 1;
+}
+
+// ─── Events ──────────────────────────────────────────────────────────────────
+
+message EventUserRegistered {
+  string address = 1;
+  Role   role    = 2;
+}
+
+message EventReputationUpdated {
+  string address   = 1;
+  string new_score = 2;
+}

@@ -1,0 +1,38 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  cypress-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Start preview
+        run: npm run preview &
+
+      - name: Wait for preview
+        run: npx wait-on http://localhost:4173
+
+      - name: Smoke check preview
+        run: |
+          echo "Checking frontend preview is serving..."
+          curl -fsS http://localhost:4173/ || (echo "Preview not responding" && exit 1)
+
+      - name: Run Cypress
+        run: npx cypress run

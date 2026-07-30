@@ -1,0 +1,45 @@
+name: Documentation
+description: Report missing, incorrect, or unclear documentation
+labels: ["documentation"]
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: Documentation type
+      options:
+        - Missing documentation
+        - Incorrect documentation
+        - Unclear / confusing documentation
+        - Outdated documentation
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Location
+      description: File path, URL, or section name
+      placeholder: "docs/api/forecast.md or /api-documentation page"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is the problem?
+      description: Describe what is wrong, missing, or unclear.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: What should the documentation say instead?
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Would you like to contribute the fix?
+      options:
+        - label: Yes, I can open a PR with the documentation fix

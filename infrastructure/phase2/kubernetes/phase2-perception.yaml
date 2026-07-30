@@ -1,0 +1,533 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# ATLAS SANCTUM — PHASE 2: PERCEPTION & INTELLIGENCE
+# Kafka Streaming | Satellite Ingestion | GPU Inference | Anomaly Detection
+# Months 3–6 | Targets: 50 biomes, 10K scenes/day, >90% anomaly precision
+# ═══════════════════════════════════════════════════════════════════════════════
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atlas-phase2
+  labels:
+    phase: "2"
+    istio-injection: enabled
+
+---
+# ─── KAFKA TOPICS CONFIGMAP ───────────────────────────────────────────────────
+# MSK (Managed Streaming for Kafka) is provisioned via Terraform
+# This ConfigMap documents the topic schema for operators
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-topics-schema
+  namespace: atlas-phase2
+data:
+  topics.yaml: |
+    # Atlas Sanctum Kafka Topic Architecture
+    # Retention: 7 days default, 30 days for anomalies
+    # Replication factor: 3 (production)
+    # Partitions: scaled by throughput requirement
+
+    topics:
+      biome.satellite.raw:
+        partitions: 50        # 1 per biome
+        retention_ms: 604800000  # 7 days
+        schema: SatelliteScene
+        producers: [satellite-ingestion-service]
+        consumers: [anomaly-detector, ndvi-processor, carbon-estimator]
+
+      biome.satellite.processed:
+        partitions: 50
+        retention_ms: 2592000000  # 30 days
+        schema: ProcessedScene
+        producers: [ndvi-processor, carbon-estimator]
+        consumers: [knowledge-graph-updater, dashboard-streamer]
+
+      biome.anomalies:
+        partitions: 10
+        retention_ms: 2592000000  # 30 days — anomalies kept longer
+        schema: AnomalyEvent
+        producers: [anomaly-detector]
+        consumers: [alert-router, governance-api, ethics-kernel]
+
+      climate.forecasts:
+        partitions: 20
+        retention_ms: 7776000000  # 90 days
+        schema: ClimateForecast
+        producers: [earth2studio-service]
+        consumers: [dashboard-streamer, optimization-layer]
+
+      health.vitals:
+        partitions: 100       # High volume from edge devices
+        retention_ms: 86400000   # 1 day (PII-sensitive, short retention)
+        schema: HealthVital
+        producers: [edge-health-devices]
+        consumers: [health-aggregator, anomaly-detector]
+
+      agent.actions:
+        partitions: 20
+        retention_ms: 2592000000
+        schema: AgentAction
+        producers: [all-agents]
+        consumers: [ethics-kernel, audit-logger, blockchain-anchor]
+
+      governance.votes:
+        partitions: 5
+        retention_ms: 31536000000  # 1 year — governance is permanent record
+        schema: GovernanceVote
+        producers: [governance-api]
+        consumers: [blockchain-anchor, transparency-ledger]
+
+---
+# ─── SATELLITE INGESTION SERVICE ──────────────────────────────────────────────
+# Polls Sentinel Hub API every 6 hours per biome
+# Publishes raw scenes to biome.satellite.raw Kafka topic
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: satellite-ingestion
+  namespace: atlas-phase2
+  labels:
+    app: satellite-ingestion
+    layer: "5"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: satellite-ingestion
+  template:
+    metadata:
+      labels:
+        app: satellite-ingestion
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: satellite-ingestion-sa
+      containers:
+        - name: satellite-ingestion
+          image: atlas-sanctum/satellite-ingestion:2.0.0
+          env:
+            - name: SENTINEL_HUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-hub-credentials
+                  key: client-id
+            - name: SENTINEL_HUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-hub-credentials
+                  key: client-secret
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: brokers
+            - name: KAFKA_TOPIC_RAW
+              value: "biome.satellite.raw"
+            - name: BIOMES_CONFIG_PATH
+              value: "/app/config/biomes.json"
+            - name: POLL_INTERVAL_SECONDS
+              value: "21600"   # 6 hours
+            - name: MAX_CLOUD_COVER_PCT
+              value: "30"
+            - name: BANDS
+              value: "B02,B03,B04,B08,B11,B12"  # RGB + NIR + SWIR for NDVI+carbon
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          volumeMounts:
+            - name: biomes-config
+              mountPath: /app/config
+              readOnly: true
+      volumes:
+        - name: biomes-config
+          configMap:
+            name: biomes-config-phase2
+
+---
+# ─── BIOMES CONFIGURATION ─────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: biomes-config-phase2
+  namespace: atlas-phase2
+data:
+  biomes.json: |
+    {
+      "biomes": [
+        {"id": "amazon-basin",      "bbox": [-73.99,-18.04,-44.0,5.27],  "priority": 1},
+        {"id": "congo-basin",       "bbox": [11.0,-5.0,31.0,5.0],        "priority": 1},
+        {"id": "sahel-belt",        "bbox": [-17.5,10.0,37.5,20.0],      "priority": 1},
+        {"id": "east-africa-rift",  "bbox": [28.0,-12.0,42.0,15.0],      "priority": 1},
+        {"id": "mekong-delta",      "bbox": [102.0,8.5,108.0,22.5],      "priority": 2},
+        {"id": "ganges-plain",      "bbox": [73.0,21.0,89.0,31.0],       "priority": 2},
+        {"id": "great-barrier-reef","bbox": [142.0,-25.0,154.0,-10.0],   "priority": 2},
+        {"id": "patagonia",         "bbox": [-75.0,-55.0,-63.0,-38.0],   "priority": 2},
+        {"id": "boreal-siberia",    "bbox": [60.0,50.0,140.0,75.0],      "priority": 3},
+        {"id": "arctic-tundra",     "bbox": [-180.0,65.0,180.0,90.0],    "priority": 3}
+      ],
+      "totalBiomes": 50,
+      "updateFrequencyHours": 6,
+      "cloudCoverThresholdPct": 30
+    }
+
+---
+# ─── GPU NODE GROUP FOR AI INFERENCE ──────────────────────────────────────────
+# Deployed via Terraform — this manifest documents the workload placement
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-node-config
+  namespace: atlas-phase2
+data:
+  node-group-spec.yaml: |
+    # GPU Node Group — Phase 2
+    # Instance: g4dn.xlarge (NVIDIA T4, 16GB VRAM)
+    # Use: PyTorch anomaly detection, NDVI processing, climate inference
+    # Taint: nvidia.com/gpu=present:NoSchedule
+    # Label: workload=gpu-inference
+    nodeGroupName: gpu-inference
+    instanceTypes: ["g4dn.xlarge", "g4dn.2xlarge"]
+    capacityType: ON_DEMAND
+    minSize: 2
+    maxSize: 10
+    desiredSize: 3
+    labels:
+      workload: gpu-inference
+      phase: "2"
+    taints:
+      - key: nvidia.com/gpu
+        value: present
+        effect: NoSchedule
+
+---
+# ─── ANOMALY DETECTION SERVICE (PyTorch on GPU) ───────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anomaly-detector
+  namespace: atlas-phase2
+  labels:
+    app: anomaly-detector
+    layer: "5"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: anomaly-detector
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      tolerations:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      nodeSelector:
+        workload: gpu-inference
+      containers:
+        - name: anomaly-detector
+          image: atlas-sanctum/anomaly-detector:2.0.0
+          env:
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: brokers
+            - name: KAFKA_TOPIC_INPUT
+              value: "biome.satellite.raw"
+            - name: KAFKA_TOPIC_OUTPUT
+              value: "biome.anomalies"
+            - name: MODEL_PATH
+              value: "/models/anomaly-detector-v2.pt"
+            - name: CONFIDENCE_THRESHOLD
+              value: "0.90"
+            - name: DEVICE
+              value: "cuda"
+            - name: BATCH_SIZE
+              value: "32"
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 8Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: 4000m
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: anomaly-models-pvc
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: anomaly-models-pvc
+  namespace: atlas-phase2
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# ─── EARTH2STUDIO CLIMATE FORECASTING SERVICE ─────────────────────────────────
+# Runs NVIDIA Earth2Studio for 25-year climate projections
+# Requires A100 GPU — scheduled as batch jobs, not always-on
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: climate-forecast-daily
+  namespace: atlas-phase2
+  labels:
+    app: earth2studio
+    layer: "2"
+spec:
+  schedule: "0 2 * * *"   # 2 AM UTC daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: earth2studio
+        spec:
+          restartPolicy: OnFailure
+          tolerations:
+            - key: nvidia.com/gpu
+              value: present
+              effect: NoSchedule
+          nodeSelector:
+            workload: gpu-inference
+          containers:
+            - name: earth2studio
+              image: atlas-sanctum/earth2studio:2.0.0
+              env:
+                - name: EARTH2STUDIO_MODEL
+                  value: "pangu-weather"
+                - name: FORECAST_HORIZON_YEARS
+                  value: "25"
+                - name: ENSEMBLE_MEMBERS
+                  value: "10"
+                - name: CMIP6_SCENARIOS
+                  value: "ssp245,ssp585"
+                - name: KAFKA_BROKERS
+                  valueFrom:
+                    secretKeyRef:
+                      name: kafka-credentials
+                      key: brokers
+                - name: KAFKA_TOPIC_OUTPUT
+                  value: "climate.forecasts"
+                - name: OUTPUT_S3_BUCKET
+                  value: "atlas-phase2-climate-forecasts"
+              resources:
+                requests:
+                  cpu: 8000m
+                  memory: 32Gi
+                  nvidia.com/gpu: "1"
+                limits:
+                  cpu: 16000m
+                  memory: 64Gi
+                  nvidia.com/gpu: "1"
+
+---
+# ─── NDVI PROCESSOR ───────────────────────────────────────────────────────────
+# Computes NDVI, soil carbon estimates, biodiversity proxy from satellite bands
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ndvi-processor
+  namespace: atlas-phase2
+  labels:
+    app: ndvi-processor
+    layer: "5"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ndvi-processor
+  template:
+    metadata:
+      labels:
+        app: ndvi-processor
+    spec:
+      containers:
+        - name: ndvi-processor
+          image: atlas-sanctum/ndvi-processor:2.0.0
+          env:
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: brokers
+            - name: KAFKA_TOPIC_INPUT
+              value: "biome.satellite.raw"
+            - name: KAFKA_TOPIC_OUTPUT
+              value: "biome.satellite.processed"
+            - name: POSTGIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: url
+            - name: TIMESCALEDB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: timescaledb-credentials
+                  key: url
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+            limits:
+              cpu: 4000m
+              memory: 8Gi
+
+---
+# ─── TIMESCALEDB (Time-series for sensor + satellite metrics) ─────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: timescaledb
+  namespace: atlas-phase2
+  labels:
+    app: timescaledb
+spec:
+  serviceName: timescaledb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: timescaledb
+  template:
+    metadata:
+      labels:
+        app: timescaledb
+    spec:
+      containers:
+        - name: timescaledb
+          image: timescale/timescaledb-ha:pg16-latest
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: timescaledb-credentials
+                  key: password
+            - name: POSTGRES_DB
+              value: atlas_timeseries
+            - name: TIMESCALEDB_TELEMETRY
+              value: "off"
+          ports:
+            - containerPort: 5432
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 4Gi
+            limits:
+              cpu: 4000m
+              memory: 16Gi
+          volumeMounts:
+            - name: timescaledb-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: timescaledb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 500Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: timescaledb
+  namespace: atlas-phase2
+spec:
+  selector:
+    app: timescaledb
+  ports:
+    - port: 5432
+      targetPort: 5432
+
+---
+# ─── PHASE 2 PROMETHEUS ALERT RULES ──────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: phase2-alert-rules
+  namespace: atlas-phase2
+data:
+  phase2-rules.yaml: |
+    groups:
+      - name: atlas-phase2-perception
+        rules:
+          - alert: SatelliteIngestionLag
+            expr: kafka_consumer_lag{topic="biome.satellite.raw"} > 1000
+            for: 10m
+            labels:
+              severity: warning
+              phase: "2"
+            annotations:
+              summary: "Satellite ingestion falling behind"
+              description: "Kafka lag {{ $value }} on biome.satellite.raw"
+
+          - alert: AnomalyDetectorDown
+            expr: up{job="anomaly-detector"} == 0
+            for: 2m
+            labels:
+              severity: critical
+              phase: "2"
+            annotations:
+              summary: "Anomaly detector is DOWN"
+              description: "Biome anomaly detection offline — ecological events may be missed"
+
+          - alert: GPUMemoryPressure
+            expr: nvidia_gpu_memory_used_bytes / nvidia_gpu_memory_total_bytes > 0.90
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "GPU memory > 90%"
+
+          - alert: SatelliteAPIRateLimit
+            expr: increase(sentinel_hub_rate_limit_errors_total[5m]) > 10
+            for: 1m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Sentinel Hub API rate limit hit"
+              description: "Reduce polling frequency or upgrade API tier"
+
+          - alert: ClimateModelFailed
+            expr: kube_job_failed{job_name=~"climate-forecast.*"} > 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Daily climate forecast job failed"

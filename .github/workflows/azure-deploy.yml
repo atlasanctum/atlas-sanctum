@@ -1,0 +1,196 @@
+name: Azure Deployment Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AZURE_RESOURCE_GROUP: atlas-genesis-rg
+  AZURE_LOCATION: eastus
+  AZURE_CONTAINER_REGISTRY: atlasgenesisregistry
+  AZURE_APP_SERVICE_PLAN: atlas-genesis-plan
+  AZURE_FRONTEND_APP: atlas-genesis-frontend
+  AZURE_BACKEND_APP: atlas-genesis-backend
+  AZURE_DATABASE_SERVER: atlas-genesis-db
+  AZURE_DATABASE_NAME: atlas_genesis
+  AZURE_KEY_VAULT: atlas-genesis-kv
+  AZURE_CDN_PROFILE: atlas-genesis-cdn
+  AZURE_CDN_ENDPOINT: atlas-genesis-frontend
+  AZURE_APP_INSIGHTS: atlas-genesis-insights
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install frontend dependencies
+      working-directory: ./
+      run: npm install
+
+    - name: Build frontend
+      working-directory: ./
+      run: npm run build
+
+    - name: Install backend dependencies
+      working-directory: ./backend
+      run: npm install
+
+    - name: Build backend
+      working-directory: ./backend
+      run: npm run build
+
+    - name: Log in to Azure
+      uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create Resource Group
+      run: |
+        az group create --name ${{ env.AZURE_RESOURCE_GROUP }} --location ${{ env.AZURE_LOCATION }}
+
+    - name: Deploy Database
+      run: |
+        az deployment group create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --template-file azure-database-config.json \
+          --parameters \
+            serverName=${{ env.AZURE_DATABASE_SERVER }} \
+            databaseName=${{ env.AZURE_DATABASE_NAME }} \
+            administratorLogin=${{ secrets.DB_ADMIN_LOGIN }} \
+            administratorLoginPassword=${{ secrets.DB_ADMIN_PASSWORD }} \
+            location=${{ env.AZURE_LOCATION }}
+
+    - name: Deploy Key Vault
+      run: |
+        az deployment group create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --template-file azure-keyvault-config.json \
+          --parameters \
+            keyVaultName=${{ env.AZURE_KEY_VAULT }} \
+            location=${{ env.AZURE_LOCATION }} \
+            tenantId=${{ secrets.AZURE_TENANT_ID }} \
+            objectId=${{ secrets.AZURE_OBJECT_ID }}
+
+    - name: Deploy Application Insights
+      run: |
+        az deployment group create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --template-file azure-application-insights.json \
+          --parameters \
+            appInsightsName=${{ env.AZURE_APP_INSIGHTS }} \
+            location=${{ env.AZURE_LOCATION }}
+
+    - name: Deploy Frontend
+      run: |
+        az deployment group create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --template-file azure-frontend-config.json \
+          --parameters \
+            webAppName=${{ env.AZURE_FRONTEND_APP }} \
+            location=${{ env.AZURE_LOCATION }} \
+            appServicePlanName=${{ env.AZURE_APP_SERVICE_PLAN }} \
+            backendApiUrl=https://${{ env.AZURE_BACKEND_APP }}.azurewebsites.net/api \
+            supabaseUrl=${{ secrets.SUPABASE_URL }} \
+            supabaseAnonKey=${{ secrets.SUPABASE_ANON_KEY }}
+
+    - name: Deploy Backend
+      run: |
+        az deployment group create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --template-file azure-backend-config.json \
+          --parameters \
+            containerAppName=${{ env.AZURE_BACKEND_APP }} \
+            location=${{ env.AZURE_LOCATION }} \
+            containerImage=${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/backend:${{ github.sha }} \
+            databaseServerName=${{ env.AZURE_DATABASE_SERVER }} \
+            databaseName=${{ env.AZURE_DATABASE_NAME }} \
+            databaseAdminLogin=${{ secrets.DB_ADMIN_LOGIN }} \
+            databaseAdminPassword=${{ secrets.DB_ADMIN_PASSWORD }} \
+            frontendUrl=https://${{ env.AZURE_FRONTEND_APP }}.azurewebsites.net
+
+    - name: Deploy CDN
+      run: |
+        az deployment group create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --template-file azure-cdn-config.json \
+          --parameters \
+            cdnProfileName=${{ env.AZURE_CDN_PROFILE }} \
+            cdnEndpointName=${{ env.AZURE_CDN_ENDPOINT }} \
+            location=${{ env.AZURE_LOCATION }} \
+            originHostName=${{ env.AZURE_FRONTEND_APP }}.azurewebsites.net
+
+    - name: Build and push Docker images
+      run: |
+        az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+        docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/frontend:${{ github.sha }} ./frontend
+        docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/backend:${{ github.sha }} ./backend
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/frontend:${{ github.sha }}
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/backend:${{ github.sha }}
+
+    - name: Deploy to Azure Container Apps
+      run: |
+        az containerapp update \
+          --name ${{ env.AZURE_BACKEND_APP }} \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/backend:${{ github.sha }}
+
+    - name: Deploy frontend to App Service
+      run: |
+        az webapp deployment source config-zip \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.AZURE_FRONTEND_APP }} \
+          --src dist.zip
+
+    - name: Run database migrations
+      run: |
+        az webapp config appsettings set \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.AZURE_BACKEND_APP }} \
+          --settings DATABASE_URL="postgresql://${{ secrets.DB_ADMIN_LOGIN }}:${{ secrets.DB_ADMIN_PASSWORD }}@${{ env.AZURE_DATABASE_SERVER }}.postgres.database.azure.com:5432/${{ env.AZURE_DATABASE_NAME }}?sslmode=require"
+
+    - name: Configure Application Insights
+      run: |
+        APP_INSIGHTS_CONNECTION_STRING=$(az monitor app-insights component show --app ${{ env.AZURE_APP_INSIGHTS }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query connectionString -o tsv)
+        az webapp config appsettings set \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.AZURE_BACKEND_APP }} \
+          --settings APPLICATIONINSIGHTS_CONNECTION_STRING="$APP_INSIGHTS_CONNECTION_STRING"
+
+    - name: Configure CORS
+      run: |
+        az webapp cors add \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.AZURE_BACKEND_APP }} \
+          --allowed-origins "https://${{ env.AZURE_FRONTEND_APP }}.azurewebsites.net"
+
+    - name: Configure SSL
+      run: |
+        az webapp config ssl bind \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.AZURE_FRONTEND_APP }} \
+          --certificate-thumbprint ${{ secrets.CERT_THUMBPRINT }} \
+          --ssl-type SNI
+
+    - name: Run health checks
+      run: |
+        sleep 60
+        curl -f https://${{ env.AZURE_FRONTEND_APP }}.azurewebsites.net || exit 1
+        curl -f https://${{ env.AZURE_BACKEND_APP }}.azurewebsites.net/health || exit 1
+
+    - name: Notify deployment status
+      run: |
+        echo "Deployment completed successfully!"
+        echo "Frontend URL: https://${{ env.AZURE_FRONTEND_APP }}.azurewebsites.net"
+        echo "Backend URL: https://${{ env.AZURE_BACKEND_APP }}.azurewebsites.net"
+        echo "CDN URL: https://${{ env.AZURE_CDN_ENDPOINT }}.azureedge.net"

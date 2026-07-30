@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+.cache
+coverage
+logs
+.husky
+*.lock
+.pnp.*
+public
+*.log
+backend/dist

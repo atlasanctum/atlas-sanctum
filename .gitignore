@@ -1,0 +1,952 @@
+# =============================================================================
+# Atlas Sanctum — .gitignore
+#
+# Open-Core Philosophy
+# ====================
+# .gitignore is NOT a tool for protecting intellectual property.
+# It only prevents local or generated files from being committed to Git.
+#
+# Proprietary source code belongs in SEPARATE PRIVATE REPOSITORIES:
+#
+#   Public (this repo)          Private (separate repos)
+#   ──────────────────          ────────────────────────
+#   atlas-protocol              atlas-intelligence
+#   atlas-sdk                   atlas-market-engine
+#   atlas-cli                   atlas-governance-ai
+#   atlas-docs                  atlas-finance-engine
+#   atlas-examples              atlas-enterprise
+#   atlas-plugins               atlas-cloud
+#
+# What belongs here:
+#   Secrets, credentials, API keys, generated files, build artifacts,
+#   local caches, OS/editor noise, and runtime data.
+#
+# What does NOT belong here:
+#   AI models, proprietary algorithms, enterprise business logic,
+#   internal datasets, premium features, commercial APIs.
+#   → Those go in private repos, accessed via stable interfaces.
+# =============================================================================
+
+
+# =============================================================================
+# SECRETS & CREDENTIALS — Never commit. Ever.
+# =============================================================================
+
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Deep nested catch-all — no .env anywhere in the tree
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+
+# Key files
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+!*.key.example
+!*.pem.example
+
+# Secret stores
+.vault-token
+vault-secrets/
+secrets/
+**/secrets/
+**/.secrets/
+secret.json
+secrets.json
+credentials.json
+service-account*.json
+*-service-account.json
+firebase-adminsdk.json
+aws-credentials
+google-credentials
+azure-credentials
+
+# Cloud provider credentials
+.aws/credentials
+.aws/config
+.gcp/
+gcp-credentials*.json
+azure-credentials*.json
+.azure/
+
+# API keys (flat files)
+api-keys.txt
+api-keys.json
+*.apikey
+
+# JWT / signing keys
+jwt-secret*
+signing-key*
+private-key*
+public-key*
+keypair*
+
+
+# =============================================================================
+# INFRASTRUCTURE — Protect the operational topology
+# =============================================================================
+
+# Terraform state (contains real resource IDs, IPs, credentials)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+terraform.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Kubernetes secrets and sensitive configs
+**/kubernetes/secrets/
+**/k8s/secrets/
+*secret*.yaml
+*secret*.yml
+!*secret*example*
+kubeconfig
+kubeconfig.*
+.kube/
+
+# Helm values with secrets
+values-production.yaml
+values-prod.yaml
+values-staging.yaml
+values-secrets.yaml
+
+# Ansible vault
+*.vault
+ansible/vault*
+group_vars/*/vault*
+
+# SSH
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+known_hosts
+authorized_keys
+
+# Docker secrets
+docker-compose.override.yml
+docker-compose.prod.yml
+docker-compose.production.yml
+!docker-compose.production.yml.example
+
+
+# =============================================================================
+# OPERATIONAL INTELLIGENCE — Live system data
+# =============================================================================
+
+# Logs (may contain PII, internal IPs, stack traces)
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+backend/logs/
+
+# Database dumps and exports
+*.sql.gz
+*.dump
+*.backup
+db-backup/
+database-backup/
+exports/
+
+# Monitoring / alerting configs with internal endpoints
+monitoring/alertmanager-secrets*
+monitoring/grafana-secrets*
+prometheus-secrets*
+
+# Internal network maps
+network-topology*
+internal-ips*
+service-mesh-config*
+
+
+# =============================================================================
+# SECURITY SYSTEMS — Vulnerability details stay private
+# =============================================================================
+
+# Penetration test results
+pentest/
+pentest-results/
+security-audit/
+vulnerability-report*
+cve-analysis*
+
+# Security scan outputs
+.snyk
+snyk-results*
+trivy-results*
+bandit-results*
+semgrep-results*
+sonarqube-results*
+
+# SAST / DAST outputs
+security-scan-results/
+owasp-results/
+zap-results/
+
+
+# =============================================================================
+# PRIVATE & SENSITIVE DATA
+# =============================================================================
+
+# User data exports (GDPR)
+user-data-exports/
+gdpr-exports/
+data-subject-requests/
+
+# Indigenous knowledge marked sovereign or sacred
+# (These are protected by FPIC — Free, Prior, Informed Consent)
+indigenous-knowledge/private/
+indigenous-knowledge/sacred/
+**/sacred/
+**/sovereign-data/
+
+# Internal research not yet published
+research/internal/
+research/unpublished/
+research/embargoed/
+
+# Partner / enterprise agreements
+contracts/
+agreements/
+nda/
+enterprise-configs/
+partner-configs/
+
+
+# =============================================================================
+# AZURE — Deployment configs with real endpoints
+# =============================================================================
+
+azure-parameters.json
+azure-backend-config.json
+azure-database-config.json
+azure-keyvault-config.json
+azure-cdn-config.json
+azure-frontend-config.json
+azure-application-insights.json
+azure-bicep-config.bicep
+!azure-*.example.json
+
+
+# =============================================================================
+# BUILD ARTIFACTS — Generated, not authored
+# =============================================================================
+
+node_modules/
+dist/
+dist-ssr/
+build/
+out/
+.next/
+.nuxt/
+.output/
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+.env/
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.sum.bak
+
+# Rust
+target/
+Cargo.lock.bak
+
+
+# =============================================================================
+# EDITOR & OS — Noise
+# =============================================================================
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V500
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+\#*\#
+.\#*
+
+
+# =============================================================================
+# TEST ARTIFACTS — Results, not code
+# =============================================================================
+
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+cypress/screenshots/
+cypress/videos/
+e2e/screenshots/
+e2e/videos/
+*.lcov
+
+
+# =============================================================================
+# LOCK FILES — Keep package-lock.json, bun.lock; ignore others
+# =============================================================================
+
+yarn.lock
+pnpm-lock.yaml
+# bun.lock and package-lock.json are intentionally kept
+
+
+# =============================================================================
+# TEMPORARY & SCRATCH
+# =============================================================================
+
+tmp/
+temp/
+.tmp/
+scratch/
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+
+
+# =============================================================================
+# DASHBOARDS — Operational / enterprise / duplicate dashboards
+# =============================================================================
+
+# Hash-suffixed duplicates (no unique value)
+src/dashboards/atlas-command-8ddb1553/
+src/dashboards/atlas-command-center-2c46f48c/
+src/dashboards/atlas-command-center-d775e7d7/
+src/dashboards/atlas-compass-2263dc64/
+src/dashboards/atlas-regenerate-926ad19e/
+src/dashboards/atlas-watch-73fc2d82/
+
+# Enterprise / admin internals
+src/dashboards/Enterpriseworkspacedashboard/
+src/dashboards/Professionaladmintemplatedesign/
+src/dashboards/Regenerativevalueexchangedashboard/
+
+# Operational command & security monitoring (internal ops)
+src/dashboards/sanctum-nexus-core/
+src/dashboards/citadel-command-center/
+src/dashboards/sentinel-command/
+src/dashboards/sentinel-hub/
+src/dashboards/atlas-oversight-console/
+src/dashboards/europe-os-command/
+src/dashboards/atlas-signal-guard/
+
+# .env files inside dashboard sub-projects
+src/dashboards/**/.env
+src/dashboards/**/.env.*
+!src/dashboards/**/.env.example
+
+
+# =============================================================================
+# LAYERS — Admin template exposes internal data model
+# =============================================================================
+
+src/layers/Professionaladmintemplatedesign-main/
+src/layers/Professionaladmintemplatedesign/
+src/layers/Regenerativevalueexchangedashboard-main/
+src/layers/Regenerativevalueexchangedashboard/
+src/layers/Globalimpacteconomyworkspace-main/
+
+# .env files inside layer sub-projects
+src/layers/**/.env
+src/layers/**/.env.*
+!src/layers/**/.env.example
+
+
+# =============================================================================
+# BACKEND — Proprietary service implementation
+# API route definitions (routes/) and type contracts (types/) stay open.
+# Service implementations, middleware internals, and orchestration are closed.
+# =============================================================================
+
+# Core service implementations (business logic, algorithms, integrations)
+backend/src/services/
+backend/src/sanctum/
+backend/src/agents/
+backend/src/core/auth/
+backend/src/core/middleware/
+backend/src/core/rbac/
+backend/src/core/tenant/
+backend/src/middleware/
+backend/src/utils/
+backend/src/config/
+backend/src/events/
+backend/src/validation/
+
+# Runtime files
+backend/src/db.ts
+backend/src/redisClient.ts
+backend/src/secrets.ts
+backend/src/secretsWatcher.ts
+backend/src/startupChecks.ts
+backend/src/tracing.ts
+backend/src/metrics.ts
+backend/src/readiness.ts
+backend/src/featureFlags.ts
+backend/src/index.ts
+
+# Database internals
+backend/db/
+
+# OPEN: API surface and type contracts
+# backend/src/routes/       ← kept open (API contract)
+# backend/src/types/        ← kept open (type contracts)
+# backend/openapi.yaml      ← kept open (API spec)
+# backend/.env.example      ← kept open (env documentation)
+
+
+# =============================================================================
+# AI LAYER — Core IP: 10-layer architecture and agent implementation
+# Type system (AtlasSanctumAI.types.ts) and API surface stay open.
+# Layer implementations, agents, memory, trust, and governance are closed.
+# =============================================================================
+
+# Layer implementations
+src/sanctum-ai/layers/
+src/sanctum-ai/agents/
+src/sanctum-ai/memory/
+src/sanctum-ai/trust/
+src/sanctum-ai/governance/
+src/sanctum-ai/interface/
+
+# Orchestrator and API implementation
+src/sanctum-ai/AtlasSanctumAI.orchestrator.ts
+src/sanctum-ai/AtlasSanctumAI.api.ts
+src/sanctum-ai/index.ts
+
+# Deployment topology is operational intelligence
+src/sanctum-ai/deployment/DeploymentRoadmap.ts
+
+# Covenant Code implementation (constitutional OS — core IP)
+src/sanctum/covenant/
+src/sanctum/ConstitutionalAIBridge.ts
+src/sanctum/core/
+
+# Backup AI services
+ai-services-backup/
+
+# OPEN: Type contracts only
+# src/sanctum-ai/AtlasSanctumAI.types.ts  ← kept open (public type contract)
+
+
+# =============================================================================
+# BLOCKCHAIN — Chain implementation and operational config
+# Proto definitions (interface contracts) stay open.
+# Module implementations, keeper logic, and genesis config are closed.
+# =============================================================================
+
+# Cosmos SDK module implementations (keeper logic, message handlers, genesis)
+chain/x/
+chain/app/
+chain/cmd/
+
+# Chain operational config (real chain ID, token denominations, treasury address)
+chain/config/genesis.json
+
+# Init and transaction scripts (operational procedures)
+chain/scripts/
+
+# Solidity contracts implementation
+atlas-sanctum/contracts/src/
+scaffold-mvp/contracts/contracts/
+scaffold-mvp/contracts/scripts/
+
+# OPEN: Interface contracts and protocol definitions
+# chain/proto/     ← kept open (protocol buffer definitions = public interface)
+# chain/README.md  ← kept open
+# chain/go.mod     ← kept open (dependency manifest)
+# chain/Makefile   ← kept open
+
+
+# =============================================================================
+# GENERATED / EPHEMERAL ARTIFACTS — Not authored, not useful in history
+# =============================================================================
+
+# ESLint reports (generated by CI, not source)
+eslint-report.json
+eslint-report.md
+eslint-trend.csv
+eslint-trend.md
+eslint-unsafe-checklist.md
+eslint-pr-comment.md
+.eslint-baseline.json
+
+# Root-level screenshots (dev snapshots, not docs)
+*.png
+*.jpg
+*.jpeg
+!public/**
+!docs/**
+screenshots/
+
+# earth2studio-project — broken uv install artifacts (not source)
+earth2studio-project/
+
+# Render / Azure / deploy shell outputs
+azure-deploy.sh
+azure-health-check.sh
+azure-validation.sh
+deploy-blue-green.sh
+deploy.sh
+start.bat
+start.sh
+start-prototype.sh
+PLATFORM_SUMMARY.sh
+
+# Test invoice HTML (generated artifact)
+test-invoice.html
+
+# index-cdn.html (generated CDN variant)
+index-cdn.html
+
+
+# =============================================================================
+# AI ASSETS — Model weights, embeddings, training artifacts
+# =============================================================================
+
+models/
+weights/
+embeddings/
+checkpoints/
+vector-cache/
+training-cache/
+fine-tunes/
+
+
+# =============================================================================
+# GENERATED INTELLIGENCE — Runtime AI caches
+# =============================================================================
+
+knowledge-cache/
+reasoning-cache/
+market-cache/
+forecast-cache/
+embeddings-cache/
+semantic-cache/
+
+
+# =============================================================================
+# DATABASES — Local files and backups
+# =============================================================================
+
+database/
+database_backups/
+
+
+# =============================================================================
+# VECTOR DATABASES — Local data stores
+# =============================================================================
+
+qdrant-data/
+pinecone-cache/
+
+
+# =============================================================================
+# TEMPORARY AI OUTPUTS
+# =============================================================================
+
+artifacts/
+experiments/
+
+
+# =============================================================================
+# PROPRIETARY PLATFORM MODULES — Belongs in private repos, not gitignored
+# Note: These are listed here only as a transitional measure while the
+# open-core split is in progress. Move to private repos when ready.
+# =============================================================================
+
+# PlaAS — Platform-as-a-Service layer (internal architecture)
+plaas/ark/
+plaas/atlas-sanctum-core/
+plaas/constellation/
+plaas/garden/
+plaas/living-city/
+plaas/living-library/
+plaas/mycelium/
+plaas/nervous-system/
+plaas/temple/
+plaas/packages/
+plaas/index.ts
+
+# Plans — internal implementation roadmaps and architecture docs
+plans/
+
+# sanctum-mvp — internal MVP implementation
+sanctum-mvp/
+
+# EthosDAO internals — keep only README
+EthosDAO/src/
+EthosDAO/scripts/
+EthosDAO/guidelines/
+EthosDAO/docker-compose.yml
+EthosDAO/nginx.conf
+EthosDAO/index.html
+EthosDAO/package.json
+EthosDAO/postcss.config.mjs
+
+# atlas-sanctum-earth2studio — AI climate integration (proprietary)
+atlas-sanctum-earth2studio/atlas_sanctum/
+atlas-sanctum-earth2studio/main.py
+atlas-sanctum-earth2studio/pyproject.toml
+atlas-sanctum-earth2studio/uv.lock
+atlas-sanctum-earth2studio/.python-version
+
+# scaffold-mvp internals — contract implementations and frontend source
+scaffold-mvp/contracts/contracts/
+scaffold-mvp/contracts/scripts/
+scaffold-mvp/contracts/test/
+scaffold-mvp/contracts/hardhat.config.ts
+scaffold-mvp/contracts/package.json
+scaffold-mvp/frontend/src/
+scaffold-mvp/frontend/index.html
+scaffold-mvp/frontend/package.json
+scaffold-mvp/infra/
+
+# backend/dist — compiled output, never source
+backend/dist/
+
+# backend/src/core — internal auth, RBAC, tenant logic
+backend/src/core/auth/
+backend/src/core/middleware/
+backend/src/core/rbac/
+backend/src/core/tenant/
+backend/src/core/index.ts
+backend/src/core/routes/auth.ts
+backend/src/core/routes/index.ts
+
+# services/ — microservice implementations (agents, digital twins, sensor fabric)
+services/ai/agents/
+services/ai/digital-twins/
+services/ai/knowledge-commons/
+services/ai/langgraph/
+services/ai/sensor-fabric/
+services/analytics/
+services/blockchain/dao/
+services/identity/
+services/payments/
+
+# src/backend — internal service implementations
+src/backend/services/
+src/backend/cardano/
+
+# src/EthosDAO — duplicate internal copy
+src/EthosDAO/
+
+
+# =============================================================================
+# WHAT IS INTENTIONALLY OPEN (documented here for clarity)
+# =============================================================================
+#
+# The following are NOT ignored and are open to the world:
+#
+#   PHILOSOPHY.md              — Mission, ethics, design philosophy
+#   README.md                  — Project overview
+#   LICENSE.md                 — License with ethical use clause
+#   docs/                      — Architecture decisions, API contracts
+#   src/sanctum-ai/            — Core AI layer protocols
+#   src/architecture/          — Type system and formal specifications
+#   src/lib/                   — Shared utilities and governance logic
+#   src/components/            — UI components
+#   src/pages/                 — Application pages
+#   src/hooks/                 — React hooks
+#   src/contexts/              — React contexts
+#   src/types/                 — TypeScript types
+#   backend/src/sanctum/       — COS plane interfaces
+#   backend/src/routes/        — API route definitions
+#   supabase/migrations/       — Database schema (no data)
+#   supabase/functions/        — Edge function source (no secrets)
+#   chain/                     — Blockchain protocol definitions
+#   plaas/                     — Platform-as-a-service layer definitions
+#   database/migrations/       — SQL schema migrations
+#   .env.example               — Environment variable documentation
+#   openapi.yaml               — API specification
+#   vite.config.ts             — Build configuration
+#   tailwind.config.ts         — Design system config
+#   tsconfig*.json             — TypeScript configuration
+#
+# CLOSED (gitignored):
+#
+#   .env / .env.*                          — All secrets and credentials
+#   *.tfstate / .terraform/                — Terraform state (real resource IDs)
+#   terraform.tfvars                       — Infrastructure variable values
+#   *secret*.yaml                          — Kubernetes secrets
+#   backend/logs/                          — Application logs (may contain PII)
+#   screenshots/                           — Dev snapshots
+#   eslint-report.*                        — Generated CI reports
+#   earth2studio-project/                  — Broken install artifacts
+#   azure-*.json                           — Azure deployment configs with endpoints
+#   pentest/ / security-audit/             — Vulnerability details
+#   indigenous-knowledge/sacred/           — Sovereign cultural data (FPIC)
+#   research/internal/                     — Unpublished research
+#   contracts/ / agreements/               — Partner agreements
+#   src/dashboards/*-8ddb1553/ etc.        — Hash-suffixed dashboard duplicates
+#   src/dashboards/Enterpriseworkspace*/   — Enterprise admin internals
+#   src/dashboards/sanctum-nexus-core/     — Operational nexus
+#   src/dashboards/citadel-command-center/ — Internal ops
+#   src/dashboards/sentinel-*/             — Security monitoring internals
+#   src/dashboards/europe-os-command/      — Regional operational command
+#   src/layers/Professionaladmintemplatedesign-main/ — Exposes DB schema
+#   src/sanctum-ai/deployment/DeploymentRoadmap.ts  — Infrastructure topology
+#
+# =============================================================================
+
+
+# =============================================================================
+# INFRASTRUCTURE TOPOLOGY — Real resource IDs, bucket names, endpoints
+# =============================================================================
+
+# Terraform main configs (contain real S3 state bucket, DynamoDB table, resource IDs)
+# variables.tf is safe (declarations only) — main.tf is not
+infrastructure/terraform/main.tf
+infrastructure/aws-org/terraform/main.tf
+infrastructure/phase1/terraform/main.tf
+infrastructure/phase2/terraform/main.tf
+infrastructure/phase3/terraform/main.tf
+infrastructure/phase4/terraform/main.tf
+infrastructure/phase5/terraform/main.tf
+infrastructure/phase6/terraform/main.tf
+
+# Render deployment manifest (real service names, URLs, DB credentials)
+render.yaml
+
+# Supabase project config (contains real project ID)
+supabase/config.toml
+
+# Production docker-compose (internal service topology + credentials)
+docker-compose.production.yml
+
+# EthosDAO production config (hardcoded real API/WS endpoints)
+EthosDAO/src/app/config/production.config.ts
+
+# Deployment orchestration scripts
+infrastructure/deploy-all-phases.sh
+infrastructure/phase1/scripts/deploy-phase1.sh
+
+
+# =============================================================================
+# MARKDOWN DOCUMENTATION — Hide all internal docs; keep only public-facing files
+# =============================================================================
+
+# Hide all .md files by default
+*.md
+**/*.md
+
+# Keep essential public-facing root docs
+!README.md
+!LICENSE.md
+!PHILOSOPHY.md
+!CONTRIBUTING.md
+!CODE_OF_CONDUCT.md
+!CHANGELOG.md
+!SECURITY.md
+!GOVERNANCE.md
+!AUTHORS.md
+!SUPPORT.md
+
+# Keep sub-project READMEs
+!apps/README.md
+!chain/README.md
+!datasets/README.md
+!examples/README.md
+!infrastructure/README.md
+!packages/README.md
+!plaas/README.md
+!research/README.md
+!services/README.md
+!tests/README.md
+!EthosDAO/README.md
+!atlas-sanctum/README.md
+!atlas-sanctum-earth2studio/README.md
+!scaffold-mvp/README.md
+!backend/README.md
+
+# Keep GitHub templates
+!.github/pull_request_template.md
+!.github/ISSUE_TEMPLATE/*.md
+
+
+# =============================================================================
+# ANTI-MANIPULATION ENGINE — Exposing detection logic aids evasion
+# =============================================================================
+
+atlas-sanctum/QUICK_START.sh
+
+
+# =============================================================================
+# DEV ARTIFACT SCRIPTS — One-off utilities, not source
+# =============================================================================
+
+demonstrate-complete-evolution.js
+demonstrate-sanctum.js
+update-navigation.js
+update-navigation.mjs
+fix-permissions.cjs
+delete_node_modules.py
+
+
+# =============================================================================
+# PYTHON PYCACHE — Compiled bytecode, never source
+# =============================================================================
+
+**/__pycache__/
+*.pyc
+*.pyo
+
+
+# =============================================================================
+# ADDITIONAL COVERAGE
+# =============================================================================
+
+# OS extras
+Icon?
+._*
+.Spotlight-V500
+
+# Editor history
+.history/
+
+# pnpm store
+.pnpm-store/
+
+# Build extras
+.cache/
+storybook-static/
+
+# API key files
+firebase-admin.json
+
+# Databases
+*.sqlite
+*.db
+*.sqlite3
+
+# direnv
+.envrc
+
+# Java
+*.class
+.gradle/
+
+# Go binaries
+bin/
+pkg/
+
+# Docker volumes
+docker-data/
+docker-volumes/
+
+# AWS SAM
+.aws-sam/
+
+# Google Cloud CLI
+.gcloud/
+
+# Firebase
+.firebase/
+
+# Vercel
+.vercel/
+
+# Netlify
+.netlify/
+
+# Generated
+generated/
+cache/
+
+# AI — vector stores and model artifacts (additional)
+vector_db/
+weaviate/
+llama_cache/
+fine_tuned_models/
+
+# Large datasets
+raw_data/
+imports/
+
+# Media artifacts
+renders/
+videos/
+recordings/
+
+# Private documentation subdirectories
+docs/funding/
+docs/investors/
+docs/contracts/
+docs/legal/
+docs/security/
+docs/private/
+docs/roadmaps/

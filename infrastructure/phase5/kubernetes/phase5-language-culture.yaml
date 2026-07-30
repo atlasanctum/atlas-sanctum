@@ -1,0 +1,556 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# ATLAS SANCTUM — PHASE 5: LANGUAGE, CULTURE & GLOBAL REACH
+# NLLB-200 | Indigenous Vault | Policy Copilot | Treaty Analysis | 45+ Languages
+# Months 18–24 | Targets: 45 languages, 20 communities, 50 policy drafts
+# ═══════════════════════════════════════════════════════════════════════════════
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atlas-phase5
+  labels:
+    phase: "5"
+    istio-injection: enabled
+    data-sovereignty: enforced
+
+---
+# ─── NLLB-200 TRANSLATION SERVICE ────────────────────────────────────────────
+# Meta's No Language Left Behind — 200 languages, optimized for low-resource
+# Africa-first: Swahili, Hausa, Amharic, Yoruba, Zulu, Igbo prioritized
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nllb-translation
+  namespace: atlas-phase5
+  labels:
+    app: nllb-translation
+    layer: "6"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nllb-translation
+  template:
+    metadata:
+      labels:
+        app: nllb-translation
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      tolerations:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      nodeSelector:
+        workload: gpu-inference
+      containers:
+        - name: nllb-translation
+          image: atlas-sanctum/nllb-translation:5.0.0
+          env:
+            - name: MODEL_NAME
+              value: "facebook/nllb-200-distilled-1.3B"   # Distilled for efficiency
+            - name: DEVICE
+              value: "cuda"
+            - name: MAX_BATCH_SIZE
+              value: "32"
+            - name: MAX_LENGTH
+              value: "512"
+            - name: SUPPORTED_LANGUAGES
+              value: "eng_Latn,fra_Latn,spa_Latn,por_Latn,ara_Arab,swa_Latn,hau_Latn,amh_Ethi,yor_Latn,zul_Latn,ibo_Latn,kin_Latn,lin_Latn,lug_Latn,nya_Latn,sna_Latn,som_Latn,tir_Ethi,wol_Latn,xho_Latn,zho_Hans,hin_Deva,ben_Beng,tam_Taml,tel_Telu,jpn_Jpan,kor_Hang,vie_Latn,tha_Thai,ind_Latn,msa_Latn,tgl_Latn,khm_Khmr,mya_Mymr,nep_Deva,sin_Sinh,urd_Arab,pus_Arab,kaz_Cyrl,uzb_Latn,tur_Latn,rus_Cyrl,ukr_Cyrl,pol_Latn,deu_Latn,nld_Latn,ita_Latn,ron_Latn"
+            - name: CULTURAL_SENSITIVITY_CHECK
+              value: "true"
+            - name: SACRED_TERMS_PROTECTION
+              value: "true"
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 8Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: 4000m
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nllb-translation
+  namespace: atlas-phase5
+spec:
+  selector:
+    app: nllb-translation
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+# ─── INDIGENOUS KNOWLEDGE VAULT ───────────────────────────────────────────────
+# CRITICAL: Implements data sovereignty controls
+# - Community-controlled access keys
+# - FPIC (Free, Prior, Informed Consent) enforcement
+# - Sacred knowledge never leaves community control
+# - ZK proofs for knowledge verification without exposure
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: indigenous-knowledge-vault
+  namespace: atlas-phase5
+  labels:
+    app: indigenous-knowledge-vault
+    layer: "6"
+    data-sovereignty: "true"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: indigenous-knowledge-vault
+  template:
+    metadata:
+      labels:
+        app: indigenous-knowledge-vault
+        data-sovereignty: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: indigenous-vault-sa
+      # Extra security: no service mesh injection for this pod
+      # All traffic is end-to-end encrypted with community keys
+      annotations:
+        sidecar.istio.io/inject: "false"
+      containers:
+        - name: indigenous-vault
+          image: atlas-sanctum/indigenous-vault:5.0.0
+          env:
+            - name: VAULT_URL
+              value: "http://vault.atlas-phase1:8200"
+            - name: VAULT_ROLE
+              value: "indigenous-vault"
+            - name: WEAVIATE_URL
+              value: "http://weaviate.atlas-phase3:8080"
+            - name: IPFS_URL
+              value: "http://ipfs.atlas-phase3:5001"
+            - name: POSTGIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: url
+            - name: FPIC_REQUIRED
+              value: "true"
+            - name: COMMUNITY_KEY_ROTATION_DAYS
+              value: "90"
+            - name: SACRED_KNOWLEDGE_ISOLATION
+              value: "true"
+            # ZK proof generation for knowledge verification
+            - name: ZK_PROVER_URL
+              value: "http://zk-prover.atlas-phase5:8080"
+            - name: ENCRYPTION_ALGORITHM
+              value: "AES-256-GCM"
+            - name: KEY_DERIVATION
+              value: "PBKDF2-SHA256"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: 2000m
+              memory: 8Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          # Read-only root filesystem for security
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: community-keys
+              mountPath: /app/keys
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: community-keys
+          secret:
+            secretName: community-encryption-keys
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: indigenous-knowledge-vault
+  namespace: atlas-phase5
+spec:
+  selector:
+    app: indigenous-knowledge-vault
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+# ─── POLICY COPILOT ───────────────────────────────────────────────────────────
+# AI-assisted policy drafting for 50 jurisdictions
+# Uses GPT-4o + mT5 + jurisdiction-specific legal corpus
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-copilot
+  namespace: atlas-phase5
+  labels:
+    app: policy-copilot
+    layer: "6"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: policy-copilot
+  template:
+    metadata:
+      labels:
+        app: policy-copilot
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: policy-copilot
+          image: atlas-sanctum/policy-copilot:5.0.0
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-credentials
+                  key: openai-api-key
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-credentials
+                  key: anthropic-api-key
+            - name: TRANSLATION_SERVICE_URL
+              value: "http://nllb-translation:8080"
+            - name: WEAVIATE_URL
+              value: "http://weaviate.atlas-phase3:8080"
+            - name: ETHICS_KERNEL_URL
+              value: "http://ethics-kernel.atlas-phase1:8080"
+            - name: JURISDICTIONS_COUNT
+              value: "50"
+            - name: LEGAL_CORPUS_COLLECTION
+              value: "PolicyDocuments"
+            - name: TREATY_CORPUS_COLLECTION
+              value: "TreatyDocuments"
+            - name: DRAFT_REVIEW_REQUIRED
+              value: "true"   # Human review before publishing
+            - name: INDIGENOUS_RIGHTS_CHECK
+              value: "true"
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 4Gi
+            limits:
+              cpu: 4000m
+              memory: 16Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: policy-copilot
+  namespace: atlas-phase5
+spec:
+  selector:
+    app: policy-copilot
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+# ─── TREATY ANALYSIS ENGINE ───────────────────────────────────────────────────
+# Analyzes 100+ international treaties for climate/indigenous rights alignment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: treaty-analyzer
+  namespace: atlas-phase5
+  labels:
+    app: treaty-analyzer
+    layer: "6"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: treaty-analyzer
+  template:
+    metadata:
+      labels:
+        app: treaty-analyzer
+    spec:
+      containers:
+        - name: treaty-analyzer
+          image: atlas-sanctum/treaty-analyzer:5.0.0
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-credentials
+                  key: openai-api-key
+            - name: WEAVIATE_URL
+              value: "http://weaviate.atlas-phase3:8080"
+            - name: TRANSLATION_SERVICE_URL
+              value: "http://nllb-translation:8080"
+            - name: TREATIES_TARGET
+              value: "100"
+            - name: ANALYSIS_DIMENSIONS
+              value: "climate_alignment,indigenous_rights,biodiversity,carbon_markets,water_rights"
+            - name: NEO4J_URL
+              value: "bolt://neo4j.atlas-phase1:7687"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: 2000m
+              memory: 8Gi
+
+---
+# ─── ZK PROVER SERVICE ────────────────────────────────────────────────────────
+# Generates ZK proofs for knowledge verification without exposing content
+# Used by indigenous vault to prove knowledge exists without revealing it
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zk-prover
+  namespace: atlas-phase5
+  labels:
+    app: zk-prover
+    layer: "9"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: zk-prover
+  template:
+    metadata:
+      labels:
+        app: zk-prover
+    spec:
+      containers:
+        - name: zk-prover
+          image: atlas-sanctum/zk-prover:5.0.0
+          env:
+            - name: PROOF_SYSTEM
+              value: "Groth16"   # Phase 5; Phase 6 → PLONK for universality
+            - name: CIRCUIT_PATH
+              value: "/app/circuits"
+            - name: PROVING_KEY_PATH
+              value: "/app/keys/proving.key"
+            - name: VERIFICATION_KEY_PATH
+              value: "/app/keys/verification.key"
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 4Gi
+            limits:
+              cpu: 8000m
+              memory: 16Gi
+          volumeMounts:
+            - name: zk-circuits
+              mountPath: /app/circuits
+              readOnly: true
+            - name: zk-keys
+              mountPath: /app/keys
+              readOnly: true
+      volumes:
+        - name: zk-circuits
+          configMap:
+            name: zk-circuits-v1
+        - name: zk-keys
+          secret:
+            secretName: zk-proving-keys
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zk-prover
+  namespace: atlas-phase5
+spec:
+  selector:
+    app: zk-prover
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+# ─── MULTILINGUAL DASHBOARD BACKEND ──────────────────────────────────────────
+# Serves the planetary dashboard in 45+ languages
+# Offline-first: pre-renders critical content for low-bandwidth regions
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multilingual-dashboard-api
+  namespace: atlas-phase5
+  labels:
+    app: multilingual-dashboard-api
+    layer: "6"
+spec:
+  replicas: 5   # Higher replicas — user-facing, global traffic
+  selector:
+    matchLabels:
+      app: multilingual-dashboard-api
+  template:
+    metadata:
+      labels:
+        app: multilingual-dashboard-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: dashboard-api
+          image: atlas-sanctum/multilingual-dashboard-api:5.0.0
+          env:
+            - name: TRANSLATION_SERVICE_URL
+              value: "http://nllb-translation:8080"
+            - name: DEFAULT_LANGUAGE
+              value: "eng_Latn"
+            - name: SUPPORTED_LANGUAGES_COUNT
+              value: "45"
+            - name: OFFLINE_FIRST_ENABLED
+              value: "true"
+            - name: CACHE_TTL_SECONDS
+              value: "300"
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: url
+            # Africa-first: pre-cache African language content
+            - name: PRIORITY_LANGUAGES
+              value: "swa_Latn,hau_Latn,amh_Ethi,yor_Latn,zul_Latn,fra_Latn,ara_Arab"
+            - name: LOW_BANDWIDTH_MODE_THRESHOLD_KBPS
+              value: "100"   # Switch to compressed mode below 100kbps
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 15
+
+---
+# ─── PHASE 5 NETWORK POLICIES ─────────────────────────────────────────────────
+# Indigenous vault has strictest isolation
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: indigenous-vault-isolation
+  namespace: atlas-phase5
+spec:
+  podSelector:
+    matchLabels:
+      app: indigenous-knowledge-vault
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only policy-copilot and treaty-analyzer can query vault
+    - from:
+        - podSelector:
+            matchLabels:
+              can-access-indigenous-vault: "true"
+      ports:
+        - port: 8080
+  egress:
+    # Vault can only write to IPFS and Weaviate (with sovereignty controls)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: atlas-phase3
+          podSelector:
+            matchLabels:
+              app: ipfs
+      ports:
+        - port: 5001
+    - to: []
+      ports:
+        - port: 53
+          protocol: UDP
+
+---
+# ─── PHASE 5 ALERT RULES ──────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: phase5-alert-rules
+  namespace: atlas-phase5
+data:
+  phase5-rules.yaml: |
+    groups:
+      - name: atlas-phase5-language-culture
+        rules:
+          - alert: IndigenousVaultUnauthorizedAccess
+            expr: increase(indigenous_vault_unauthorized_access_total[5m]) > 0
+            for: 0m
+            labels:
+              severity: critical
+              phase: "5"
+            annotations:
+              summary: "CRITICAL: Unauthorized access attempt on Indigenous Knowledge Vault"
+              description: "Immediate investigation required. Count: {{ $value }}"
+
+          - alert: TranslationServiceDown
+            expr: up{job="nllb-translation"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "NLLB translation service down — multilingual access broken"
+
+          - alert: ZKProverFailing
+            expr: rate(zk_proof_generation_failures_total[5m]) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "ZK proof generation failure rate > 10%"
+
+          - alert: PolicyDraftQueueBacklog
+            expr: policy_draft_queue_depth > 50
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Policy copilot queue backlog > 50 drafts"

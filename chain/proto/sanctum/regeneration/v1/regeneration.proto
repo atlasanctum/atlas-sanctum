@@ -1,0 +1,55 @@
+syntax = "proto3";
+package sanctum.regeneration.v1;
+
+option go_package = "github.com/atlashumanitarian/sanctum/x/regeneration/types";
+
+import "gogoproto/gogo.proto";
+
+enum ProjectStatus {
+  PROJECT_STATUS_UNSPECIFIED = 0;
+  PROJECT_STATUS_ACTIVE      = 1;
+  PROJECT_STATUS_COMPLETED   = 2;
+  PROJECT_STATUS_SUSPENDED   = 3;
+}
+
+message RegenerationProject {
+  string        id                  = 1;
+  string        owner               = 2;
+  string        name                = 3;
+  string        location            = 4;
+  string        carbon_tonnes       = 5 [(gogoproto.customtype) = "cosmossdk.io/math.LegacyDec", (gogoproto.nullable) = false];
+  string        biodiversity_score  = 6 [(gogoproto.customtype) = "cosmossdk.io/math.LegacyDec", (gogoproto.nullable) = false];
+  uint64        trees_planted       = 7;
+  ProjectStatus status              = 8;
+  int64         created_at          = 9;
+  int64         updated_at          = 10;
+}
+
+message MsgCreateProject {
+  string owner    = 1;
+  string name     = 2;
+  string location = 3;
+}
+
+message MsgCreateProjectResponse { string id = 1; }
+
+message MsgUpdateProjectMetrics {
+  string signer              = 1;
+  string project_id          = 2;
+  string carbon_tonnes_delta = 3 [(gogoproto.customtype) = "cosmossdk.io/math.LegacyDec", (gogoproto.nullable) = false];
+  string biodiversity_delta  = 4 [(gogoproto.customtype) = "cosmossdk.io/math.LegacyDec", (gogoproto.nullable) = false];
+  uint64 trees_planted_delta = 5;
+}
+
+message MsgUpdateProjectMetricsResponse {}
+
+message QueryProjectRequest  { string id = 1; }
+message QueryProjectResponse { RegenerationProject project = 1; }
+
+message QueryProjectsByOwnerRequest  { string owner = 1; }
+message QueryProjectsByOwnerResponse { repeated RegenerationProject projects = 1; }
+
+message GenesisState { repeated RegenerationProject projects = 1; }
+
+message EventProjectCreated { string id = 1; string owner = 2; }
+message EventMetricsUpdated { string id = 1; string carbon_tonnes = 2; uint64 trees_planted = 3; }

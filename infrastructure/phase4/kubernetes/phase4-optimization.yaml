@@ -1,0 +1,420 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# ATLAS SANCTUM — PHASE 4 KUBERNETES: OPTIMIZATION & LEARNING
+# RL Training | Optuna | Resource Allocator | Ecological Feedback | Grid Optimizer
+# ═══════════════════════════════════════════════════════════════════════════════
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atlas-phase4
+  labels:
+    phase: "4"
+    istio-injection: enabled
+
+---
+# ─── RL POLICY TRAINING JOB ───────────────────────────────────────────────────
+# Trains governance adaptation policy using PPO (Proximal Policy Optimization)
+# Reward signal: ecological health improvement + resource allocation efficiency
+# Target: convergence < 1000 episodes
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rl-governance-training-v1
+  namespace: atlas-phase4
+  labels:
+    app: rl-training
+    algorithm: ppo
+    domain: governance
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: rl-training
+    spec:
+      restartPolicy: OnFailure
+      tolerations:
+        - key: workload
+          value: gpu-training
+          effect: NoSchedule
+      nodeSelector:
+        workload: gpu-training
+      containers:
+        - name: rl-trainer
+          image: atlas-sanctum/rl-trainer:4.0.0
+          env:
+            - name: ALGORITHM
+              value: "PPO"
+            - name: ENVIRONMENT
+              value: "atlas-governance-env-v1"
+            - name: MAX_EPISODES
+              value: "1000"
+            - name: CONVERGENCE_THRESHOLD
+              value: "0.95"
+            - name: LEARNING_RATE
+              value: "3e-4"
+            - name: GAMMA
+              value: "0.99"
+            - name: CLIP_RANGE
+              value: "0.2"
+            - name: N_STEPS
+              value: "2048"
+            - name: BATCH_SIZE
+              value: "64"
+            - name: N_EPOCHS
+              value: "10"
+            - name: DEVICE
+              value: "cuda"
+            - name: MODEL_OUTPUT_S3
+              value: "s3://atlas-phase4-rl-models/governance/ppo-v1/"
+            - name: POSTGIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: url
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: brokers
+            # Reward signal sources
+            - name: ECOLOGICAL_FEEDBACK_TOPIC
+              value: "biome.satellite.processed"
+            - name: CARBON_PROJECTS_TOPIC
+              value: "carbon.projects.updates"
+          resources:
+            requests:
+              cpu: 4000m
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: 8000m
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+
+---
+# ─── OPTUNA DISTRIBUTED HYPERPARAMETER SEARCH ─────────────────────────────────
+# Searches optimal RL hyperparameters across 100 trials in parallel
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: optuna-rl-hparam-search
+  namespace: atlas-phase4
+  labels:
+    app: optuna
+spec:
+  completions: 10    # 10 parallel workers
+  parallelism: 10
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app: optuna
+    spec:
+      restartPolicy: OnFailure
+      tolerations:
+        - key: workload
+          value: gpu-training
+          effect: NoSchedule
+      nodeSelector:
+        workload: gpu-training
+      containers:
+        - name: optuna-worker
+          image: atlas-sanctum/optuna-worker:4.0.0
+          env:
+            - name: OPTUNA_STUDY_NAME
+              value: "atlas-rl-governance-v1"
+            - name: OPTUNA_STORAGE
+              valueFrom:
+                secretKeyRef:
+                  name: optuna-db-credentials
+                  key: url
+            - name: N_TRIALS_PER_WORKER
+              value: "10"
+            - name: OBJECTIVE
+              value: "maximize_ecological_health"
+            - name: SEARCH_SPACE
+              value: |
+                {
+                  "learning_rate": {"type": "loguniform", "low": 1e-5, "high": 1e-2},
+                  "gamma": {"type": "uniform", "low": 0.9, "high": 0.999},
+                  "n_steps": {"type": "categorical", "choices": [512, 1024, 2048, 4096]},
+                  "clip_range": {"type": "uniform", "low": 0.1, "high": 0.4}
+                }
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 8Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: 4000m
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+
+---
+# ─── RESOURCE ALLOCATION OPTIMIZER (Layer 3) ──────────────────────────────────
+# Continuously optimizes: carbon project funding, water allocation, energy routing
+# Uses trained RL policy + real-time ecological data
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resource-allocator
+  namespace: atlas-phase4
+  labels:
+    app: resource-allocator
+    layer: "3"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: resource-allocator
+  template:
+    metadata:
+      labels:
+        app: resource-allocator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: resource-allocator
+          image: atlas-sanctum/resource-allocator:4.0.0
+          env:
+            - name: RL_MODEL_S3_PATH
+              value: "s3://atlas-phase4-rl-models/governance/ppo-v1/best_model.zip"
+            - name: POSTGIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: url
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: brokers
+            - name: KAFKA_INPUT_TOPIC
+              value: "biome.satellite.processed"
+            - name: KAFKA_OUTPUT_TOPIC
+              value: "resource.allocations"
+            - name: CARBON_PROJECTS_COUNT
+              value: "100"
+            - name: OPTIMIZATION_INTERVAL_SECONDS
+              value: "300"   # Re-optimize every 5 minutes
+            - name: EFFICIENCY_TARGET
+              value: "0.85"
+            - name: ETHICS_KERNEL_URL
+              value: "http://ethics-kernel.atlas-phase1:8080"
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 4Gi
+            limits:
+              cpu: 4000m
+              memory: 16Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+
+---
+# ─── ENERGY GRID OPTIMIZER ────────────────────────────────────────────────────
+# Optimizes renewable energy distribution across 10 bioregions
+# Integrates with smart grid APIs and carbon credit pricing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: energy-grid-optimizer
+  namespace: atlas-phase4
+  labels:
+    app: energy-grid-optimizer
+    layer: "3"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: energy-grid-optimizer
+  template:
+    metadata:
+      labels:
+        app: energy-grid-optimizer
+    spec:
+      containers:
+        - name: energy-optimizer
+          image: atlas-sanctum/energy-optimizer:4.0.0
+          env:
+            - name: BIOREGIONS_COUNT
+              value: "10"
+            - name: OPTIMIZATION_ALGORITHM
+              value: "linear_programming"   # scipy.optimize for deterministic problems
+            - name: RL_FALLBACK_MODEL
+              value: "s3://atlas-phase4-rl-models/energy/sac-v1/best_model.zip"
+            - name: GRID_API_ENDPOINTS
+              valueFrom:
+                secretKeyRef:
+                  name: grid-api-credentials
+                  key: endpoints
+            - name: CARBON_PRICE_FEED_URL
+              value: "http://marketplace-api.atlas-phase1:8080/api/v2/marketplace/riums/market"
+            - name: WATER_SAVINGS_TARGET_PCT
+              value: "0.30"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: 2000m
+              memory: 8Gi
+
+---
+# ─── ECOLOGICAL FEEDBACK LOOP ─────────────────────────────────────────────────
+# Computes RL reward signals from real ecological data
+# Feeds back into RL training pipeline
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecological-feedback
+  namespace: atlas-phase4
+  labels:
+    app: ecological-feedback
+    layer: "4"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ecological-feedback
+  template:
+    metadata:
+      labels:
+        app: ecological-feedback
+    spec:
+      containers:
+        - name: ecological-feedback
+          image: atlas-sanctum/ecological-feedback:4.0.0
+          env:
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: brokers
+            - name: INPUT_TOPICS
+              value: "biome.satellite.processed,biome.anomalies,resource.allocations"
+            - name: OUTPUT_TOPIC
+              value: "rl.reward.signals"
+            - name: TIMESCALEDB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: timescaledb-credentials
+                  key: url
+            # Reward function weights
+            - name: REWARD_NDVI_WEIGHT
+              value: "0.35"
+            - name: REWARD_CARBON_WEIGHT
+              value: "0.45"
+            - name: REWARD_BIODIVERSITY_WEIGHT
+              value: "0.20"
+            - name: ANOMALY_PENALTY
+              value: "-0.5"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+
+---
+# ─── WATER & AGRICULTURE PLANNING ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: water-agriculture-planner
+  namespace: atlas-phase4
+  labels:
+    app: water-agriculture-planner
+    layer: "3"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: water-agriculture-planner
+  template:
+    metadata:
+      labels:
+        app: water-agriculture-planner
+    spec:
+      containers:
+        - name: planner
+          image: atlas-sanctum/water-agriculture-planner:4.0.0
+          env:
+            - name: POSTGIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: url
+            - name: CLIMATE_FORECAST_TOPIC
+              value: "climate.forecasts"
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: brokers
+            - name: WATER_SAVINGS_TARGET_PCT
+              value: "0.30"
+            - name: PILOT_REGIONS
+              value: "sahel,east-africa-rift,mekong-delta"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+
+---
+# ─── PHASE 4 ALERT RULES ──────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: phase4-alert-rules
+  namespace: atlas-phase4
+data:
+  phase4-rules.yaml: |
+    groups:
+      - name: atlas-phase4-optimization
+        rules:
+          - alert: RLPolicyDivergence
+            expr: rl_policy_entropy > 5.0
+            for: 10m
+            labels:
+              severity: critical
+              phase: "4"
+            annotations:
+              summary: "RL policy diverging — training unstable"
+              description: "Policy entropy {{ $value }} exceeds threshold. Reduce learning rate."
+
+          - alert: ResourceAllocationEfficiencyLow
+            expr: resource_allocation_efficiency_ratio < 0.85
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Resource allocation efficiency below 85% target"
+
+          - alert: EcologicalFeedbackLag
+            expr: kafka_consumer_lag{topic="rl.reward.signals"} > 500
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Ecological feedback loop lagging"
+
+          - alert: GPUTrainingCostAlert
+            expr: aws_billing_estimated_charges > 500
+            for: 1m
+            labels:
+              severity: warning
+            annotations:
+              summary: "GPU training costs exceeding $500/day budget"

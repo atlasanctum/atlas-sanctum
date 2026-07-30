@@ -1,0 +1,40 @@
+{
+  "name": "@atlas-sanctum/sdk",
+  "version": "0.1.0",
+  "description": "Atlas Sanctum typed SDK — the official client for the regenerative intelligence platform",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./impact": {
+      "import": "./dist/impact.mjs",
+      "types": "./dist/impact.d.ts"
+    },
+    "./governance": {
+      "import": "./dist/governance.mjs",
+      "types": "./dist/governance.d.ts"
+    },
+    "./ai": {
+      "import": "./dist/ai.mjs",
+      "types": "./dist/ai.d.ts"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/atlas-sanctum/platform"
+  }
+}

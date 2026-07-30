@@ -1,0 +1,695 @@
+# Atlas Humanitarian Platform - Kubernetes Monitoring Stack
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# PROMETHEUS CLUSTER ROLE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/metrics
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources:
+      - configmaps
+    verbs: ["get"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs:
+      - /metrics
+      - /metrics/cadvisor
+    verbs: ["get"]
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# PROMETHEUS SERVICE ACCOUNT
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# PROMETHEUS CLUSTER ROLE BINDING
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# PROMETHEUS CONFIG MAP
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+  labels:
+    app: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'atlas-production'
+    
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ['alertmanager:9093']
+    
+    rule_files:
+      - '/etc/prometheus/rules/*.yml'
+    
+    scrape_configs:
+      # Self monitoring
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+    
+      # Kubernetes API
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name]
+            action: keep
+            regex: default;kubernetes
+    
+      # Kubernetes Nodes
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+    
+      # Kubernetes Pods
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - action: keep
+            regex: true
+            source_labels: [__meta_kubernetes_prometheus_annotation_prometheus_io_scrape]
+          - action: replace
+            regex: (.+)
+            source_labels: [__meta_kubernetes_prometheus_annotation_prometheus_io_path]
+            target_label: __metrics_path__
+          - action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            source_labels: [__address__, __meta_kubernetes_prometheus_annotation_prometheus_io_port]
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_prometheus_annotation_prometheus_io_(.+)
+    
+      # Atlas API
+      - job_name: 'atlas-api'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - atlas-production
+        relabel_configs:
+          - action: keep
+            regex: atlas-api
+            source_labels: [__meta_kubernetes_pod_label_app]
+          - action: replace
+            regex: (.+)
+            source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            target_label: __metrics_path__
+          - action: replace
+            regex: (.+)
+            source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+            target_label: __address__
+    
+      # PostgreSQL
+      - job_name: 'postgresql'
+        static_configs:
+          - targets: ['atlas-postgres-metrics:9187']
+    
+      # Redis
+      - job_name: 'redis'
+        static_configs:
+          - targets: ['atlas-redis-metrics:9121']
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# PROMETHEUS DEPLOYMENT
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: prometheus
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: prometheus
+      annotations:
+        prometheus.io/scrape: "true"
+    spec:
+      serviceAccountName: prometheus
+      
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.48.0
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          
+          args:
+            - '--config.file=/etc/prometheus/prometheus.yml'
+            - '--storage.tsdb.path=/prometheus'
+            - '--storage.tsdb.retention.time=15d'
+            - '--web.enable-lifecycle'
+            - '--web.enable-admin-api'
+            - '--query.max-concurrency=10'
+            - '--web.route-prefix=/'
+          
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: rules
+              mountPath: /etc/prometheus/rules
+            - name: storage
+              mountPath: /prometheus
+          
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: rules
+          emptyDir: {}
+        - name: storage
+          persistentVolumeClaim:
+            claimName: prometheus-pvc
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# PROMETHEUS SERVICE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+  annotations:
+    prometheus.io/scrape: "true"
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# GRAFANA SERVICE ACCOUNT
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana
+  namespace: monitoring
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# GRAFANA CLUSTER ROLE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grafana
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - secrets
+    verbs: ["get", "watch", "list"]
+  - apiGroups: [""]
+    resources:
+      - services
+    verbs: ["get", "watch", "list"]
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# GRAFANA CLUSTER ROLE BINDING
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grafana
+subjects:
+  - kind: ServiceAccount
+    name: grafana
+    namespace: monitoring
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# GRAFANA CONFIG MAP
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  grafana.ini: |
+    [server]
+    root_url = %(protocol)s://%(domain)s/grafana/
+    serve_from_sub_path = true
+    
+    [security]
+    admin_user = admin
+    admin_password = ${GRAFANA_ADMIN_PASSWORD}
+    secret_key = ${GRAFANA_SECRET_KEY}
+    
+    [auth]
+    disable_login_form = false
+    disable_signout_menu = false
+    
+    [users]
+    allow_sign_up = false
+    auto_assign_org = true
+    auto_assign_org_role = Admin
+    
+    [paths]
+    data = /var/lib/grafana/data
+    logs = /var/log/grafana
+    plugins = /var/lib/grafana/plugins
+    
+    [dashboards]
+    versions_to_keep = 20
+    
+    [metrics]
+    enabled = true
+    basic_auth_username = ${METRICS_USER}
+    basic_auth_password = ${METRICS_PASSWORD}
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# GRAFANA PROVISIONING CONFIG MAP
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        options:
+          path: /var/lib/grafana/dashboards
+  datasources.yaml: |
+    apiVersion: 1
+    deleteDatasources:
+      - name: Prometheus
+        orgId: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        orgId: 1
+        version: 1
+        editable: false
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# GRAFANA DEPLOYMENT
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: grafana
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: grafana
+      annotations:
+        prometheus.io/scrape: "true"
+    spec:
+      serviceAccountName: grafana
+      
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.0.0
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          
+          env:
+            - name: GRAFANA_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-credentials
+                  key: admin-password
+            - name: GRAFANA_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-credentials
+                  key: secret-key
+            - name: METRICS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-credentials
+                  key: metrics-user
+            - name: METRICS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-credentials
+                  key: metrics-password
+          
+          volumeMounts:
+            - name: config
+              mountPath: /etc/grafana
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: storage
+              mountPath: /var/lib/grafana/data
+          
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      
+      volumes:
+        - name: config
+          configMap:
+            name: grafana-config
+        - name: provisioning
+          configMap:
+            name: grafana-provisioning
+        - name: dashboards
+          emptyDir: {}
+        - name: storage
+          persistentVolumeClaim:
+            claimName: grafana-pvc
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# GRAFANA SERVICE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  type: ClusterIP
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# ALERTMANAGER CONFIG
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+  labels:
+    app: alertmanager
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      smtp_smarthost: 'smtp.example.com:587'
+      smtp_from: 'alerts@atlas.org'
+      smtp_auth_username: 'alerts@atlas.org'
+      smtp_auth_password: ${SMTP_PASSWORD}
+    
+    route:
+      group_by: ['alertname', 'severity']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'default'
+      routes:
+        - match:
+            severity: critical
+          receiver: 'critical-alerts'
+          continue: true
+        - match:
+            severity: warning
+          receiver: 'warning-alerts'
+    
+    receivers:
+      - name: 'default'
+        email_configs:
+          - to: 'alerts@atlas.org'
+            send_resolved: true
+        slack_configs:
+          - channel: '#alerts-atlas'
+            api_url: ${SLACK_WEBHOOK_URL}
+            send_resolved: true
+        pagerduty_configs:
+          - service_key: ${PAGERDUTY_KEY}
+            severity: error
+    
+      - name: 'critical-alerts'
+        pagerduty_configs:
+          - service_key: ${PAGERDUTY_KEY}
+            severity: critical
+    
+      - name: 'warning-alerts'
+        email_configs:
+          - to: 'alerts@atlas.org'
+            send_resolved: true
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# ALERTMANAGER DEPLOYMENT
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  labels:
+    app: alertmanager
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.25.0
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: http
+              containerPort: 9093
+              protocol: TCP
+          
+          args:
+            - '--config.file=/etc/alertmanager/alertmanager.yml'
+            - '--storage.path=/alertmanager'
+            - '--cluster.advertise-address=0.0.0.0:9093'
+            - '--cluster.listen-address=0.0.0.0:9094'
+          
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+            - name: storage
+              mountPath: /alertmanager
+          
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+        - name: storage
+          emptyDir: {}
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# ALERTMANAGER SERVICE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  labels:
+    app: alertmanager
+spec:
+  type: ClusterIP
+  selector:
+    app: alertmanager
+  ports:
+    - name: http
+      port: 9093
+      targetPort: 9093
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# PERSISTENT VOLUME CLAIMS
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: gp3
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: gp3

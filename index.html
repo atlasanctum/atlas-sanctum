@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head><!-- Google Analytics - Minimal implementation to prevent Function@[native code] errors -->
+<script>
+  // Initialize dataLayer safely
+  if (typeof window !== 'undefined') {
+    window.dataLayer = window.dataLayer || [];
+
+    // Create a safe gtag function that never errors
+    window.gtag = function() {
+      try {
+        // Convert arguments to array safely to avoid serialization issues
+        var args = [];
+        for (var i = 0; i < arguments.length; i++) {
+          args.push(arguments[i]);
+        }
+        if (Array.isArray(window.dataLayer)) {
+          window.dataLayer.push(args);
+        }
+      } catch(e) {
+        // Silently ignore all errors to prevent breaking the app
+      }
+    };
+  }
+</script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atlas Sanctum | Regenerative Value Exchange</title>
+    <meta name="description" content="The world&#39;s first regenerative platform uniting ecosystems across land, oceans, and human health—scaling to trillion-dollar impact with an enduring ethical core.">
+    <meta name="author" content="Atlas Sanctum" />
+
+    
+    
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6b16cb72-a8db-45e7-a498-8f55c7104aa1/id-preview-40edd1d1--b1819b7d-c650-4301-bdf0-aafddde65e48.lovable.app-1782835354407.png">
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@AtlasSanctum" />
+    <meta name="twitter:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6b16cb72-a8db-45e7-a498-8f55c7104aa1/id-preview-40edd1d1--b1819b7d-c650-4301-bdf0-aafddde65e48.lovable.app-1782835354407.png">
+
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net http://localhost:4000 https://iwremcrvzoprfrytvoze.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests;" />
+    <style>
+      .skip-to-content{position:absolute;left:-999px;top:auto;background:#000;color:#fff;padding:8px;z-index:9999}
+      .skip-to-content:focus{left:10px;top:10px}
+    </style>
+    <meta property="og:title" content="Atlas Sanctum | Regenerative Value Exchange">
+  <meta name="twitter:title" content="Atlas Sanctum | Regenerative Value Exchange">
+  <meta property="og:description" content="The world&#39;s first regenerative platform uniting ecosystems across land, oceans, and human health—scaling to trillion-dollar impact with an enduring ethical core.">
+  <meta name="twitter:description" content="The world&#39;s first regenerative platform uniting ecosystems across land, oceans, and human health—scaling to trillion-dollar impact with an enduring ethical core.">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+</head>
+  
+
+  <body>
+    <a href="#root" class="skip-to-content">Skip to main content</a>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

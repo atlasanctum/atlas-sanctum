@@ -1,0 +1,307 @@
+# Atlas Genesis - Production Monitoring Configuration
+# Comprehensive monitoring, logging, and alerting setup
+
+version: '3.8'
+
+services:
+  # ============================================
+  # Prometheus (Metrics Collection)
+  # ============================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: atlas-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    networks:
+      - atlas-monitoring
+    restart: unless-stopped
+
+  # ============================================
+  # Grafana (Metrics Visualization)
+  # ============================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: atlas-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-worldmap-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - atlas-monitoring
+    restart: unless-stopped
+
+  # ============================================
+  # Node Exporter (System Metrics)
+  # ============================================
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: atlas-node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - atlas-monitoring
+    restart: unless-stopped
+
+  # ============================================
+  # Postgres Exporter (Database Metrics)
+  # ============================================
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: atlas-postgres-exporter
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: postgresql://postgres:postgres@postgres:5432/atlas_genesis?sslmode=disable
+    depends_on:
+      - postgres
+    networks:
+      - atlas-monitoring
+      - atlas-network
+    restart: unless-stopped
+
+  # ============================================
+  # Redis Exporter (Cache Metrics)
+  # ============================================
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: atlas-redis-exporter
+    ports:
+      - "9121:9121"
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - atlas-monitoring
+      - atlas-network
+    restart: unless-stopped
+
+  # ============================================
+  # Elasticsearch (Log Storage)
+  # ============================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: atlas-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - atlas-monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================
+  # Logstash (Log Processing)
+  # ============================================
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: atlas-logstash
+    ports:
+      - "5044:5044"
+      - "9600:9600"
+    volumes:
+      - ./monitoring/logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./monitoring/logstash/config:/usr/share/logstash/config:ro
+      - ./logs:/var/log/atlas:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - atlas-monitoring
+    restart: unless-stopped
+
+  # ============================================
+  # Kibana (Log Visualization)
+  # ============================================
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: atlas-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - atlas-monitoring
+    restart: unless-stopped
+
+  # ============================================
+  # AlertManager (Alert Management)
+  # ============================================
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: atlas-alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    networks:
+      - atlas-monitoring
+    restart: unless-stopped
+
+  # ============================================
+  # Jaeger (Distributed Tracing)
+  # ============================================
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: atlas-jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    networks:
+      - atlas-monitoring
+    restart: unless-stopped
+
+  # ============================================
+  # Uptime Kuma (Uptime Monitoring)
+  # ============================================
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: atlas-uptime-kuma
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime_data:/app/data
+    networks:
+      - atlas-monitoring
+    restart: unless-stopped
+
+  # ============================================
+  # Cadvisor (Container Metrics)
+  # ============================================
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: atlas-cadvisor
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    networks:
+      - atlas-monitoring
+    restart: unless-stopped
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  atlas-monitoring:
+    driver: bridge
+  atlas-network:
+    external: true
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  alertmanager_data:
+    driver: local
+  uptime_data:
+    driver: local
+
+# ============================================
+# Configuration Files Structure
+# ============================================
+
+# Create these configuration files:
+# 
+# monitoring/
+# ├── prometheus.yml
+# ├── alertmanager.yml
+# ├── rules/
+# │   ├── atlas-rules.yml
+# │   └── node-rules.yml
+# ├── grafana/
+# │   ├── dashboards/
+# │   │   ├── atlas-dashboard.json
+# │   │   └── system-dashboard.json
+# │   └── datasources/
+# │       └── prometheus.yml
+# └── logstash/
+#     ├── config/
+#     │   └── logstash.yml
+#     └── pipeline/
+#         └── atlas.conf
+
+# ============================================
+# Usage Commands
+# ============================================
+
+# Start monitoring stack:
+# docker-compose -f docker-compose.production.yml -f docker-compose.monitoring.yml up -d
+
+# View all services:
+# docker-compose -f docker-compose.production.yml -f docker-compose.monitoring.yml ps
+
+# Stop monitoring:
+# docker-compose -f docker-compose.monitoring.yml down
+
+# View logs:
+# docker-compose -f docker-compose.monitoring.yml logs -f prometheus
+
+# Access URLs:
+# - Grafana: http://localhost:3000 (admin/admin)
+# - Prometheus: http://localhost:9090
+# - AlertManager: http://localhost:9093
+# - Kibana: http://localhost:5601
+# - Jaeger: http://localhost:16686
+# - Uptime Kuma: http://localhost:3001

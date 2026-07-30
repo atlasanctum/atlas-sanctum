@@ -1,0 +1,699 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# ATLAS SANCTUM — PHASE 1 KUBERNETES MANIFESTS
+# Ethics Kernel | Neo4j Knowledge Graph | Vault | Governance API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+---
+# ─── Namespace ────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atlas-phase1
+  labels:
+    phase: "1"
+    security: zero-trust
+    istio-injection: enabled
+
+---
+# ─── ETHICS KERNEL DEPLOYMENT ─────────────────────────────────────────────────
+# Runs on dedicated ON_DEMAND nodes (ethics-core taint)
+# This service MUST be healthy before any agent action is permitted
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ethics-kernel
+  namespace: atlas-phase1
+  labels:
+    app: ethics-kernel
+    layer: "1"
+    criticality: critical
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ethics-kernel
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0   # Zero downtime — ethics must always be available
+  template:
+    metadata:
+      labels:
+        app: ethics-kernel
+        layer: "1"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: ethics-kernel-sa
+      tolerations:
+        - key: workload
+          value: ethics-core
+          effect: NoSchedule
+      nodeSelector:
+        workload: ethics-core
+      # Anti-affinity: spread across all 3 AZs
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: ethics-kernel
+              topologyKey: topology.kubernetes.io/zone
+      containers:
+        - name: ethics-kernel
+          image: atlas-sanctum/ethics-kernel:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 9090
+          env:
+            - name: ETHICS_PRINCIPLES_VERSION
+              value: "1.0.0"
+            - name: HARD_BLOCK_ENABLED
+              value: "true"
+            - name: HUMAN_OVERRIDE_ENDPOINT
+              value: "http://governance-api:8080/override"
+            - name: OTEL_SERVICE_NAME
+              value: "ethics-kernel"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring:4317"
+          envFrom:
+            - secretRef:
+                name: ethics-kernel-secrets
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          # Graceful shutdown: finish in-flight ethics evaluations
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 15"]
+          volumeMounts:
+            - name: principles-config
+              mountPath: /app/config/principles
+              readOnly: true
+      volumes:
+        - name: principles-config
+          configMap:
+            name: ethics-principles-v1
+      terminationGracePeriodSeconds: 30
+
+---
+# ─── ETHICS KERNEL SERVICE ────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: ethics-kernel
+  namespace: atlas-phase1
+  labels:
+    app: ethics-kernel
+spec:
+  selector:
+    app: ethics-kernel
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: grpc
+      port: 9090
+      targetPort: 9090
+
+---
+# ─── ETHICS KERNEL HPA ────────────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ethics-kernel
+  namespace: atlas-phase1
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ethics-kernel
+  minReplicas: 3
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Pods
+      pods:
+        metric:
+          name: ethics_evaluations_per_second
+        target:
+          type: AverageValue
+          averageValue: "100"
+
+---
+# ─── ETHICS KERNEL PDB ────────────────────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ethics-kernel
+  namespace: atlas-phase1
+spec:
+  minAvailable: 2   # Always keep 2 replicas during disruptions
+  selector:
+    matchLabels:
+      app: ethics-kernel
+
+---
+# ─── ETHICS PRINCIPLES CONFIGMAP ──────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ethics-principles-v1
+  namespace: atlas-phase1
+data:
+  principles.json: |
+    {
+      "version": "1.0.0",
+      "constitutionalPrinciples": [
+        {
+          "id": "no-harm",
+          "weight": 1.0,
+          "hardBlock": true,
+          "forbiddenSignals": ["exploit", "extract", "manipulate", "surveil"]
+        },
+        {
+          "id": "regenerative-alignment",
+          "weight": 0.9,
+          "hardBlock": false,
+          "requiredSignals": ["restore", "regenerate", "protect", "educate", "heal"]
+        },
+        {
+          "id": "no-surveillance-capitalism",
+          "weight": 1.0,
+          "hardBlock": true,
+          "forbiddenSignals": ["engagement_maximization", "behavioral_extraction", "dark_pattern"]
+        },
+        {
+          "id": "indigenous-sovereignty",
+          "weight": 1.0,
+          "hardBlock": true,
+          "fpicRequired": true
+        }
+      ],
+      "humanOverrideAlwaysEnabled": true,
+      "minimumEthicsScore": 0.5
+    }
+
+---
+# ─── NEO4J KNOWLEDGE GRAPH — StatefulSet ──────────────────────────────────────
+# Stores 10K+ planetary concepts, bioregional relationships, governance structures
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: neo4j
+  namespace: atlas-phase1
+  labels:
+    app: neo4j
+    layer: "1"
+spec:
+  serviceName: neo4j
+  replicas: 1   # Phase 1: single instance; Phase 3 → Neo4j Aura Enterprise cluster
+  selector:
+    matchLabels:
+      app: neo4j
+  template:
+    metadata:
+      labels:
+        app: neo4j
+    spec:
+      containers:
+        - name: neo4j
+          image: neo4j:5.15-enterprise
+          env:
+            - name: NEO4J_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: neo4j-credentials
+                  key: auth
+            - name: NEO4J_PLUGINS
+              value: '["apoc", "graph-data-science"]'
+            - name: NEO4J_dbms_memory_heap_initial__size
+              value: "2G"
+            - name: NEO4J_dbms_memory_heap_max__size
+              value: "4G"
+            - name: NEO4J_dbms_memory_pagecache_size
+              value: "2G"
+            - name: NEO4J_ACCEPT_LICENSE_AGREEMENT
+              value: "yes"
+          ports:
+            - name: bolt
+              containerPort: 7687
+            - name: http
+              containerPort: 7474
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 6Gi
+            limits:
+              cpu: 4000m
+              memory: 8Gi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 7474
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          volumeMounts:
+            - name: neo4j-data
+              mountPath: /data
+            - name: neo4j-logs
+              mountPath: /logs
+  volumeClaimTemplates:
+    - metadata:
+        name: neo4j-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 100Gi
+    - metadata:
+        name: neo4j-logs
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+# ─── NEO4J SERVICE ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: neo4j
+  namespace: atlas-phase1
+spec:
+  selector:
+    app: neo4j
+  ports:
+    - name: bolt
+      port: 7687
+      targetPort: 7687
+    - name: http
+      port: 7474
+      targetPort: 7474
+
+---
+# ─── GOVERNANCE API DEPLOYMENT ────────────────────────────────────────────────
+# Handles: proposals, votes, council management, supermajority logic
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: governance-api
+  namespace: atlas-phase1
+  labels:
+    app: governance-api
+    layer: "1"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: governance-api
+  template:
+    metadata:
+      labels:
+        app: governance-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: governance-api-sa
+      containers:
+        - name: governance-api
+          image: atlas-sanctum/governance-api:1.0.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: url
+            - name: NEO4J_URL
+              value: "bolt://neo4j:7687"
+            - name: ETHICS_KERNEL_URL
+              value: "http://ethics-kernel:8080"
+            - name: BLOCKCHAIN_ANCHOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: blockchain-secrets
+                  key: polygon-rpc-url
+            - name: SUPERMAJORITY_THRESHOLD
+              value: "0.67"
+            - name: COUNCIL_QUORUM
+              value: "0.51"
+            - name: HUMAN_OVERRIDE_ENABLED
+              value: "true"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: governance-api
+  namespace: atlas-phase1
+spec:
+  selector:
+    app: governance-api
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+# ─── VAULT DEPLOYMENT (HashiCorp Vault) ───────────────────────────────────────
+# Manages: DB credentials, API keys, blockchain private keys, JWT secrets
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  namespace: atlas-phase1
+  labels:
+    app: vault
+spec:
+  serviceName: vault
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8200"
+        prometheus.io/path: "/v1/sys/metrics"
+    spec:
+      serviceAccountName: vault-sa
+      containers:
+        - name: vault
+          image: hashicorp/vault:1.15
+          command: ["vault", "server", "-config=/vault/config/vault.hcl"]
+          ports:
+            - name: http
+              containerPort: 8200
+            - name: cluster
+              containerPort: 8201
+          env:
+            - name: VAULT_ADDR
+              value: "http://127.0.0.1:8200"
+            - name: VAULT_CLUSTER_ADDR
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: AWS_REGION
+              value: "us-east-1"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /v1/sys/health?standbyok=true
+              port: 8200
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+              port: 8200
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: vault-config
+              mountPath: /vault/config
+            - name: vault-data
+              mountPath: /vault/data
+      volumes:
+        - name: vault-config
+          configMap:
+            name: vault-config
+  volumeClaimTemplates:
+    - metadata:
+        name: vault-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: atlas-phase1
+data:
+  vault.hcl: |
+    ui = true
+    cluster_name = "atlas-phase1-vault"
+
+    storage "raft" {
+      path    = "/vault/data"
+      node_id = "vault-0"
+    }
+
+    listener "tcp" {
+      address     = "0.0.0.0:8200"
+      tls_disable = "true"   # TLS terminated at Istio sidecar
+    }
+
+    seal "awskms" {
+      region     = "us-east-1"
+      kms_key_id = "alias/atlas-phase1-vault-unseal"
+    }
+
+    telemetry {
+      prometheus_retention_time = "30s"
+      disable_hostname          = true
+    }
+
+    api_addr     = "http://vault:8200"
+    cluster_addr = "http://vault:8201"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: atlas-phase1
+spec:
+  selector:
+    app: vault
+  ports:
+    - name: http
+      port: 8200
+      targetPort: 8200
+    - name: cluster
+      port: 8201
+      targetPort: 8201
+
+---
+# ─── NETWORK POLICIES (Zero-Trust) ───────────────────────────────────────────
+# Default: deny all ingress and egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: atlas-phase1
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Ethics kernel: only accepts traffic from governance-api and agent services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ethics-kernel-ingress
+  namespace: atlas-phase1
+spec:
+  podSelector:
+    matchLabels:
+      app: ethics-kernel
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              can-call-ethics: "true"
+      ports:
+        - port: 8080
+        - port: 9090
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: governance-api
+      ports:
+        - port: 8080
+    # Allow DNS
+    - to: []
+      ports:
+        - port: 53
+          protocol: UDP
+
+---
+# Governance API: can call ethics-kernel, neo4j, postgres, vault
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: governance-api-egress
+  namespace: atlas-phase1
+spec:
+  podSelector:
+    matchLabels:
+      app: governance-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ethics-kernel
+      ports:
+        - port: 8080
+    - to:
+        - podSelector:
+            matchLabels:
+              app: neo4j
+      ports:
+        - port: 7687
+    - to:
+        - podSelector:
+            matchLabels:
+              app: vault
+      ports:
+        - port: 8200
+    # External: PostgreSQL RDS, Polygon RPC
+    - to: []
+      ports:
+        - port: 5432
+        - port: 443
+        - port: 53
+          protocol: UDP
+
+---
+# ─── RBAC ─────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ethics-kernel-sa
+  namespace: atlas-phase1
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/atlas-ethics-kernel-role
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: governance-api-sa
+  namespace: atlas-phase1
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/atlas-governance-api-role
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-sa
+  namespace: atlas-phase1
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/atlas-vault-role
+
+---
+# ─── INGRESS ──────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: phase1-ingress
+  namespace: atlas-phase1
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  tls:
+    - hosts:
+        - governance.atlas-sanctum.earth
+        - api.atlas-sanctum.earth
+      secretName: atlas-phase1-tls
+  rules:
+    - host: governance.atlas-sanctum.earth
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: governance-api
+                port:
+                  number: 8080
+    - host: api.atlas-sanctum.earth
+      http:
+        paths:
+          - path: /ethics
+            pathType: Prefix
+            backend:
+              service:
+                name: ethics-kernel
+                port:
+                  number: 8080

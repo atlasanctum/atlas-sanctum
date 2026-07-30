@@ -1,0 +1,341 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# ATLAS SANCTUM — COMPREHENSIVE PROMETHEUS ALERT RULES
+# All 6 Phases | Production-Grade | Civilization-Scale Observability
+# ═══════════════════════════════════════════════════════════════════════════════
+
+groups:
+
+  # ─── TIER 0: CIVILIZATION-CRITICAL (Page immediately, 24/7) ─────────────────
+  - name: atlas-tier0-civilization-critical
+    rules:
+
+      - alert: EthicsKernelDown
+        expr: up{job="ethics-kernel"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          tier: "0"
+          page: "true"
+        annotations:
+          summary: "CIVILIZATION CRITICAL: Ethics kernel is DOWN"
+          description: |
+            The ethics kernel is offline. ALL agent actions are blocked.
+            No AI decisions can be made without ethics validation.
+            IMMEDIATE human intervention required.
+          runbook: "https://docs.atlas-sanctum.earth/runbooks/ethics-kernel-down"
+
+      - alert: HumanOverrideBusDown
+        expr: up{job="human-override-bus"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          tier: "0"
+          page: "true"
+        annotations:
+          summary: "CIVILIZATION CRITICAL: Human override bus is DOWN"
+          description: "Humans cannot override AI decisions. Shut down all agents immediately."
+
+      - alert: AIAlignmentDriftCritical
+        expr: |
+          rate(ethics_violations_total[5m])
+          / rate(agent_actions_total[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+          tier: "0"
+          page: "true"
+        annotations:
+          summary: "CRITICAL: AI alignment drift > 1% violation rate"
+          description: |
+            Ethics violation rate: {{ $value | humanizePercentage }}
+            This indicates potential AI alignment failure at scale.
+            Engage constitutional guard and human oversight immediately.
+
+      - alert: IndigenousVaultBreach
+        expr: increase(indigenous_vault_unauthorized_access_total[1m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          tier: "0"
+          page: "true"
+        annotations:
+          summary: "CRITICAL: Indigenous Knowledge Vault unauthorized access"
+          description: "Potential data sovereignty violation. Isolate vault immediately."
+
+      - alert: BlockchainAuditTrailCorrupted
+        expr: blockchain_audit_trail_integrity_check == 0
+        for: 1m
+        labels:
+          severity: critical
+          tier: "0"
+        annotations:
+          summary: "CRITICAL: Blockchain audit trail integrity check failed"
+
+  # ─── TIER 1: INFRASTRUCTURE CRITICAL (Page within 5 minutes) ────────────────
+  - name: atlas-tier1-infrastructure-critical
+    rules:
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+          / sum(rate(http_requests_total[5m])) by (service) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          tier: "1"
+        annotations:
+          summary: "Service {{ $labels.service }}: error rate > 5%"
+          description: "Error rate: {{ $value | humanizePercentage }}"
+
+      - alert: APILatencyP99High
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: critical
+          tier: "1"
+        annotations:
+          summary: "Service {{ $labels.service }}: p99 latency > 2s"
+
+      - alert: DatabaseConnectionPoolExhausted
+        expr: pg_stat_activity_count / pg_settings_max_connections > 0.90
+        for: 2m
+        labels:
+          severity: critical
+          tier: "1"
+        annotations:
+          summary: "PostgreSQL connection pool > 90% — risk of connection refusal"
+
+      - alert: KafkaConsumerLagCritical
+        expr: kafka_consumer_lag{topic=~"biome.*|agent.*|governance.*"} > 100000
+        for: 5m
+        labels:
+          severity: critical
+          tier: "1"
+        annotations:
+          summary: "Kafka lag critical on {{ $labels.topic }}: {{ $value }} messages"
+
+      - alert: EKSNodeNotReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          tier: "1"
+        annotations:
+          summary: "EKS node {{ $labels.node }} is NotReady"
+
+      - alert: PodCrashLooping
+        expr: |
+          rate(kube_pod_container_status_restarts_total[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          tier: "1"
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash-looping"
+
+  # ─── TIER 2: PERFORMANCE WARNINGS (Ticket within 1 hour) ────────────────────
+  - name: atlas-tier2-performance-warnings
+    rules:
+
+      - alert: HighRequestLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          tier: "2"
+        annotations:
+          summary: "Global p95 latency > 1s"
+
+      - alert: CPUThrottling
+        expr: |
+          rate(container_cpu_cfs_throttled_seconds_total[5m])
+          / rate(container_cpu_cfs_periods_total[5m]) > 0.25
+        for: 10m
+        labels:
+          severity: warning
+          tier: "2"
+        annotations:
+          summary: "Container {{ $labels.container }} CPU throttled > 25%"
+
+      - alert: MemoryPressure
+        expr: |
+          container_memory_working_set_bytes
+          / container_spec_memory_limit_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          tier: "2"
+        annotations:
+          summary: "Container {{ $labels.container }} memory > 85% of limit"
+
+      - alert: PVCStorageFilling
+        expr: |
+          kubelet_volume_stats_used_bytes
+          / kubelet_volume_stats_capacity_bytes > 0.80
+        for: 10m
+        labels:
+          severity: warning
+          tier: "2"
+        annotations:
+          summary: "PVC {{ $labels.persistentvolumeclaim }} > 80% full"
+
+      - alert: WeaviateVectorCountHigh
+        expr: weaviate_objects_total > 800000000
+        for: 1m
+        labels:
+          severity: warning
+          tier: "2"
+        annotations:
+          summary: "Weaviate approaching 1B vectors — plan storage expansion"
+
+  # ─── TIER 3: AFRICA-FIRST EDGE CONNECTIVITY ──────────────────────────────────
+  - name: atlas-tier3-africa-edge
+    rules:
+
+      - alert: AfricaRegionLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{region="af-south-1"}[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          tier: "3"
+          region: africa
+        annotations:
+          summary: "Africa region p95 latency > 500ms"
+          description: "African users experiencing degraded performance. Check CDN routing."
+
+      - alert: EdgeNodeOffline
+        expr: up{job="edge-health-device"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          tier: "3"
+        annotations:
+          summary: "Edge health device {{ $labels.instance }} offline"
+          description: "Rural clinic device offline. Check LoRa connectivity and battery."
+
+      - alert: OfflineSyncQueueBacklog
+        expr: offline_sync_queue_depth > 10000
+        for: 10m
+        labels:
+          severity: warning
+          tier: "3"
+        annotations:
+          summary: "Offline sync queue backlog > 10K events"
+          description: "Edge devices accumulating unsynced data. Check connectivity."
+
+      - alert: LoRaGatewayDown
+        expr: up{job="lora-gateway"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          tier: "3"
+        annotations:
+          summary: "LoRa gateway {{ $labels.instance }} offline"
+          description: "Rural sensor network connectivity lost in {{ $labels.bioregion }}"
+
+  # ─── TIER 4: SECURITY & COMPLIANCE ───────────────────────────────────────────
+  - name: atlas-tier4-security-compliance
+    rules:
+
+      - alert: AnomalousAPITraffic
+        expr: |
+          rate(http_requests_total[1m]) > 10 *
+          avg_over_time(rate(http_requests_total[1m])[1h:1m])
+        for: 2m
+        labels:
+          severity: warning
+          tier: "4"
+        annotations:
+          summary: "Anomalous API traffic spike — potential DDoS or scraping"
+
+      - alert: JWTTokenAbuseDetected
+        expr: increase(jwt_validation_failures_total[5m]) > 100
+        for: 1m
+        labels:
+          severity: critical
+          tier: "4"
+        annotations:
+          summary: "High JWT validation failure rate — potential token abuse"
+
+      - alert: VaultSealDetected
+        expr: vault_core_unsealed == 0
+        for: 1m
+        labels:
+          severity: critical
+          tier: "4"
+          page: "true"
+        annotations:
+          summary: "CRITICAL: HashiCorp Vault is SEALED — secrets unavailable"
+
+      - alert: TLSCertificateExpiringSoon
+        expr: |
+          (ssl_certificate_expiry_seconds - time()) / 86400 < 30
+        for: 1h
+        labels:
+          severity: warning
+          tier: "4"
+        annotations:
+          summary: "TLS certificate for {{ $labels.domain }} expires in < 30 days"
+
+      - alert: UnauthorizedNamespaceAccess
+        expr: increase(kubernetes_audit_unauthorized_requests_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          tier: "4"
+        annotations:
+          summary: "Unauthorized Kubernetes API access attempts detected"
+
+  # ─── TIER 5: BUSINESS METRICS ─────────────────────────────────────────────
+  - name: atlas-tier5-business-metrics
+    rules:
+
+      - alert: RIUTradingVolumeAnomaly
+        expr: |
+          abs(rate(riu_trading_volume_total[1h]) -
+          avg_over_time(rate(riu_trading_volume_total[1h])[24h:1h]))
+          / stddev_over_time(rate(riu_trading_volume_total[1h])[24h:1h]) > 3
+        for: 5m
+        labels:
+          severity: warning
+          tier: "5"
+        annotations:
+          summary: "RIU trading volume anomaly (> 3 sigma deviation)"
+
+      - alert: CarbonValidationFailureRate
+        expr: |
+          rate(carbon_validation_failures_total[1h])
+          / rate(carbon_validation_attempts_total[1h]) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+          tier: "5"
+        annotations:
+          summary: "Carbon validation failure rate > 5%"
+
+      - alert: GovernanceProposalQuorumNotMet
+        expr: governance_proposal_quorum_ratio < 0.51
+        for: 24h
+        labels:
+          severity: warning
+          tier: "5"
+        annotations:
+          summary: "Governance proposal {{ $labels.proposal_id }} quorum not met after 24h"
+
+      - alert: BondCouponPaymentFailed
+        expr: increase(bond_coupon_payment_failures_total[1h]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          tier: "5"
+        annotations:
+          summary: "Bond coupon payment failure — financial obligation at risk"

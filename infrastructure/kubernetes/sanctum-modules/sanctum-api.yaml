@@ -1,0 +1,267 @@
+---
+# Atlas Sanctum — COS API Deployment
+# Plane: All (monorepo deployment — split per microservice when traffic warrants)
+# Scaling: HPA 2-20 replicas based on CPU + custom RPS metric
+# Security: Non-root user, read-only root FS, no privilege escalation
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sanctum-api
+  namespace: atlas-sanctum
+  labels:
+    app: sanctum-api
+    version: "3.0.0"
+    plane: all
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: sanctum-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: sanctum-api
+        version: "3.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: sanctum-api-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: api
+          image: atlas-sanctum/api:3.0.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 4000
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "4000"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          envFrom:
+            - secretRef:
+                name: sanctum-secrets
+            - configMapRef:
+                name: sanctum-config
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: logs
+              mountPath: /var/log/atlas-sanctum
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: sanctum-api
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: sanctum-api
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sanctum-api
+  namespace: atlas-sanctum
+  labels:
+    app: sanctum-api
+spec:
+  type: ClusterIP
+  selector:
+    app: sanctum-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 4000
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sanctum-api-hpa
+  namespace: atlas-sanctum
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sanctum-api
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 120
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sanctum-api-pdb
+  namespace: atlas-sanctum
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: sanctum-api
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sanctum-config
+  namespace: atlas-sanctum
+data:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  LOG_FORMAT: json
+  FEATURE_AI_AGENTS: "true"
+  FEATURE_BLOCKCHAIN: "true"
+  FEATURE_KAFKA_STREAMING: "true"
+  FEATURE_KNOWLEDGE_GRAPH: "true"
+  AGENT_RUNTIME_ENABLED: "true"
+  AGENT_MAX_CONCURRENT: "50"
+  ETHICS_ENGINE_ENABLED: "true"
+  ETHICS_HARD_BLOCK_ON_VIOLATION: "true"
+  ZERO_TRUST_ENABLED: "true"
+
+---
+# Service Account with least-privilege RBAC
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sanctum-api-sa
+  namespace: atlas-sanctum
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/sanctum-api-role
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sanctum-api-netpol
+  namespace: atlas-sanctum
+spec:
+  podSelector:
+    matchLabels:
+      app: sanctum-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app: sanctum-worker
+      ports:
+        - port: 4000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: atlas-sanctum
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+    - ports:
+        - port: 443  # External HTTPS (AI providers, payment gateways)
+        - port: 5432 # PostgreSQL
+        - port: 6379 # Redis
+        - port: 9092 # Kafka

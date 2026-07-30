@@ -1,0 +1,55 @@
+syntax = "proto3";
+package sanctum.oracle.v1;
+
+option go_package = "github.com/atlashumanitarian/sanctum/x/oracle/types";
+
+import "gogoproto/gogo.proto";
+
+enum OracleType {
+  ORACLE_TYPE_UNSPECIFIED = 0;
+  ORACLE_TYPE_HUMAN       = 1;
+  ORACLE_TYPE_API         = 2;
+  ORACLE_TYPE_SENSOR      = 3;
+}
+
+message Oracle {
+  string     address    = 1;
+  OracleType type       = 2;
+  string     reputation = 3 [(gogoproto.customtype) = "cosmossdk.io/math.LegacyDec", (gogoproto.nullable) = false];
+  bool       active     = 4;
+  int64      registered_at = 5;
+}
+
+message MsgRegisterOracle {
+  string     address = 1;
+  OracleType type    = 2;
+}
+
+message MsgRegisterOracleResponse {}
+
+message MsgSuspendOracle {
+  string admin   = 1;
+  string address = 2;
+  string reason  = 3;
+}
+
+message MsgSuspendOracleResponse {}
+
+message MsgReactivateOracle {
+  string admin   = 1;
+  string address = 2;
+}
+
+message MsgReactivateOracleResponse {}
+
+message QueryOracleRequest  { string address = 1; }
+message QueryOracleResponse { Oracle oracle = 1; }
+
+message QueryActiveOraclesRequest  {}
+message QueryActiveOraclesResponse { repeated Oracle oracles = 1; }
+
+message GenesisState { repeated Oracle oracles = 1; }
+
+message EventOracleRegistered { string address = 1; OracleType type = 2; }
+message EventOracleSuspended  { string address = 1; string reason = 2; }
+message EventOracleReactivated { string address = 1; }

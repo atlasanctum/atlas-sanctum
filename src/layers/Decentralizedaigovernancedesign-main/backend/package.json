@@ -1,0 +1,35 @@
+{
+  "name": "decentralized-ai-governance-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Decentralized AI Governance Design",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:migrate": "ts-node db/migrate.ts",
+    "db:seed": "ts-node db/seed.ts"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "redis": "^4.6.10",
+    "socket.io": "^4.7.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "uuid": "^9.0.1",
+    "crypto-js": "^4.2.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/pg": "^8.10.9",
+    "@types/node": "^20.10.0",
+    "@types/uuid": "^9.0.7",
+    "@types/crypto-js": "^4.2.1",
+    "@types/cors": "^2.8.17",
+    "typescript": "^5.3.2",
+    "ts-node-dev": "^2.0.0"
+  }
+}

@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use Atlas Sanctum in your research or build upon it, please cite it using the metadata below."
+type: software
+title: "Atlas Sanctum"
+abstract: "A regenerative intelligence platform for civilization-scale decision making, combining AI, climate science, economics, public health, and governance into a unified operating system for regenerative development."
+authors:
+  - family-names: Ochako
+    given-names: Eugene
+    alias: ObiwanKenobee
+    affiliation: Atlas Humanitarian
+repository-code: "https://github.com/AtlasSanctum/atlas-sanctum"
+url: "https://atlassanctum.org"
+license: Apache-2.0
+version: "2.0.0"
+date-released: "2026-01-03"
+keywords:
+  - regenerative intelligence
+  - climate intelligence
+  - AI
+  - multi-agent systems
+  - knowledge graph
+  - digital twins
+  - carbon markets
+  - governance
+  - public health
+  - open source

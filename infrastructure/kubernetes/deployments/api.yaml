@@ -1,0 +1,338 @@
+# Atlas Humanitarian Platform - Kubernetes API Deployment
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# API DEPLOYMENT
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-api
+  namespace: atlas-production
+  labels:
+    app: atlas-api
+    version: v1.0.0
+    environment: production
+    team: backend
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+spec:
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: atlas-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: atlas-api
+        version: v1.0.0
+        environment: production
+        team: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: atlas-api-sa
+      
+      # Affinity rules
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload-type
+                    operator: In
+                    values:
+                      - general
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: atlas-api
+                topologyKey: kubernetes.io/hostname
+      
+      # Tolerations
+      tolerations:
+        - key: "workload-type"
+          operator: "Equal"
+          value: "general"
+          effect: "NoSchedule"
+        - key: "spot-enabled"
+          operator: "Exists"
+          effect: "NoExecute"
+          tolerationSeconds: 300
+      
+      containers:
+        - name: api
+          image: 123456789.dkr.ecr.us-east-1.amazonaws.com/atlas-api:v1.0.0
+          imagePullPolicy: Always
+          
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+            - name: metrics
+              containerPort: 3001
+              protocol: TCP
+          
+          envFrom:
+            - configMapRef:
+                name: atlas-app-config
+            - secretRef:
+                name: database-credentials
+            - secretRef:
+                name: api-keys
+          
+          env:
+            # Resource limits
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=2048"
+            
+            # Feature flags
+            - name: FEATURE_MULTI_LANGUAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-feature-flags
+                  key: FEATURE_MULTI_LANGUAGE
+                  optional: true
+            
+            # Tracing
+            - name: OTEL_SERVICE_NAME
+              value: "atlas-api"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://opentelemetry-collector.monitoring:4317"
+            - name: OTEL_TRACES_SAMPLER
+              value: "parentbased_always_on"
+          
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+          
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+            successThreshold: 1
+          
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 10"]
+          
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /home/nodeapp/.npm
+            - name: config
+              mountPath: /home/nodeapp/config
+              readOnly: true
+      
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir:
+            sizeLimit: 500Mi
+        - name: config
+          configMap:
+            name: atlas-app-config
+      
+      terminationGracePeriodSeconds: 30
+      
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: atlas-api
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: atlas-api
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# API SERVICE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-api
+  namespace: atlas-production
+  labels:
+    app: atlas-api
+    environment: production
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "false"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+spec:
+  type: LoadBalancer
+  selector:
+    app: atlas-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 3000
+      protocol: TCP
+  sessionAffinity: None
+  externalTrafficPolicy: Local
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# HORIZONTAL POD AUTOSCALER
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: atlas-api
+  namespace: atlas-production
+  labels:
+    app: atlas-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: atlas-api
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# POD DISRUPTION BUDGET
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: atlas-api
+  namespace: atlas-production
+  labels:
+    app: atlas-api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: atlas-api
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# INGRESS
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: atlas-api
+  namespace: atlas-production
+  labels:
+    app: atlas-api
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Request-ID: $req_id";
+      more_set_headers "X-Response-Time: $upstream_response_time";
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://atlas.org"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization, X-Requested-With"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - api.atlas.org
+        - "*.api.atlas.org"
+      secretName: atlas-api-tls
+  rules:
+    - host: api.atlas.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: atlas-api
+                port:
+                  number: 80
