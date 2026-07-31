@@ -12,7 +12,7 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM nginx:1.27-alpine AS production
+FROM nginx:1.31-alpine AS production
 
 # Run as non-root
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
