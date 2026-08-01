@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
 
 from atlas_agent_graph import atlas_agent_graph
+from dev_lifecycle_agents import dev_lifecycle_graph
 
 load_dotenv()
 
@@ -63,7 +64,10 @@ def health():
 @app.get("/task-types")
 def task_types(x_agent_secret: str | None = Header(default=None)):
     _verify_secret(x_agent_secret)
-    return {"task_types": atlas_agent_graph.available_task_types()}
+    return {
+        "task_types": atlas_agent_graph.available_task_types(),
+        "lifecycle_task_types": dev_lifecycle_graph.available_task_types(),
+    }
 
 
 @app.post("/run", response_model=RunResponse)
@@ -87,6 +91,38 @@ def run_agent(body: RunRequest, x_agent_secret: str | None = Header(default=None
         return RunResponse(success=True, data=result)
     except Exception as e:
         logger.error("Agent run failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── Lifecycle Routes ────────────────────────────────────────────────────────
+
+@app.get("/lifecycle/task-types")
+def lifecycle_task_types(x_agent_secret: str | None = Header(default=None)):
+    _verify_secret(x_agent_secret)
+    return {"task_types": dev_lifecycle_graph.available_task_types()}
+
+
+@app.post("/lifecycle/run", response_model=RunResponse)
+def run_lifecycle(body: RunRequest, x_agent_secret: str | None = Header(default=None)):
+    _verify_secret(x_agent_secret)
+
+    if body.task_type not in dev_lifecycle_graph.available_task_types():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown lifecycle task_type '{body.task_type}'. "
+                   f"Valid: {dev_lifecycle_graph.available_task_types()}",
+        )
+
+    try:
+        result = dev_lifecycle_graph.run(
+            task_type=body.task_type,
+            payload=body.payload,
+            covenant_id=body.covenant_id,
+            requested_by=body.requested_by,
+        )
+        return RunResponse(success=True, data=result)
+    except Exception as e:
+        logger.error("Lifecycle run failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
