@@ -4,7 +4,7 @@
 # ============================================
 # Stage 1: Frontend Build
 # ============================================
-FROM node:18-alpine AS frontend-builder
+FROM node:26-alpine AS frontend-builder
 
 # Set working directory
 WORKDIR /app
@@ -31,7 +31,7 @@ RUN npm run build
 # ============================================
 # Stage 2: Backend Build
 # ============================================
-FROM node:18-alpine AS backend-builder
+FROM node:26-alpine AS backend-builder
 
 # Set working directory
 WORKDIR /app
@@ -52,7 +52,7 @@ RUN npm run build
 # ============================================
 # Stage 3: Production Runtime
 # ============================================
-FROM node:18-alpine AS production
+FROM node:26-alpine AS production
 
 # Install system dependencies
 RUN apk add --no-cache \
@@ -101,7 +101,7 @@ CMD ["node", "index.js"]
 # ============================================
 # Development Docker Configuration
 # ============================================
-FROM node:18-alpine AS development
+FROM node:26-alpine AS development
 
 # Install system dependencies
 RUN apk add --no-cache \
