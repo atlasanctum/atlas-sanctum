@@ -1,0 +1,156 @@
+syntax = "proto3";
+
+package sanctum.governance.v1;
+
+option go_package = "github.com/atlas-sanctum/sanctum/x/governance/types";
+
+import "google/protobuf/timestamp.proto";
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum ProposalType {
+  PROPOSAL_TYPE_UNSPECIFIED          = 0;
+  PROPOSAL_TYPE_POLICY               = 1;
+  PROPOSAL_TYPE_CONSTITUTIONAL       = 2;
+  PROPOSAL_TYPE_RESOURCE_ALLOCATION  = 3;
+  PROPOSAL_TYPE_PARTNERSHIP          = 4;
+  PROPOSAL_TYPE_PARAMETER_CHANGE     = 5;
+}
+
+enum ProposalStatus {
+  PROPOSAL_STATUS_UNSPECIFIED = 0;
+  PROPOSAL_STATUS_DRAFT       = 1;
+  PROPOSAL_STATUS_ACTIVE      = 2;
+  PROPOSAL_STATUS_PASSED      = 3;
+  PROPOSAL_STATUS_REJECTED    = 4;
+  PROPOSAL_STATUS_VETOED      = 5;
+  PROPOSAL_STATUS_EXECUTED    = 6;
+  PROPOSAL_STATUS_CANCELLED   = 7;
+}
+
+enum VoteOption {
+  VOTE_OPTION_UNSPECIFIED = 0;
+  VOTE_OPTION_YES         = 1;
+  VOTE_OPTION_NO          = 2;
+  VOTE_OPTION_ABSTAIN     = 3;
+}
+
+// ─── Messages ─────────────────────────────────────────────────────────────────
+
+message Proposal {
+  uint64                    id                       = 1;
+  string                    proposer                 = 2;
+  string                    title                    = 3;
+  string                    description              = 4;
+  string                    seven_generation_impact  = 5;
+  ProposalType              proposal_type            = 6;
+  ProposalStatus            status                   = 7;
+  google.protobuf.Timestamp voting_start             = 8;
+  google.protobuf.Timestamp voting_end               = 9;
+  string                    yes_weight               = 10;
+  string                    no_weight                = 11;
+  string                    abstain_weight           = 12;
+  string                    total_eligible_weight    = 13;
+  repeated string           affected_bioregions      = 14;
+  bool                      executed                 = 15;
+  bool                      vetoed                   = 16;
+}
+
+message Vote {
+  uint64     proposal_id = 1;
+  string     voter       = 2;
+  VoteOption option      = 3;
+  string     weight      = 4;
+  string     rationale   = 5;
+}
+
+message GovernanceMember {
+  string address       = 1;
+  string voting_weight = 2;
+  string role          = 3;
+  string bioregion     = 4;
+  bool   active        = 5;
+}
+
+message GovernanceParams {
+  string voting_period_seconds    = 1;
+  string quorum_bps               = 2;
+  string supermajority_bps        = 3;
+  string veto_window_seconds      = 4;
+  string min_proposal_weight      = 5;
+}
+
+// ─── Queries ──────────────────────────────────────────────────────────────────
+
+message QueryProposalRequest  { uint64 id = 1; }
+message QueryProposalResponse { Proposal proposal = 1; }
+
+message QueryProposalsRequest {
+  ProposalStatus status = 1;
+  string         voter  = 2;
+  uint64         page   = 3;
+  uint64         limit  = 4;
+}
+message QueryProposalsResponse {
+  repeated Proposal proposals = 1;
+  uint64            total     = 2;
+}
+
+message QueryVoteRequest  { uint64 proposal_id = 1; string voter = 2; }
+message QueryVoteResponse { Vote vote = 1; }
+
+message QueryVotesRequest  { uint64 proposal_id = 1; }
+message QueryVotesResponse { repeated Vote votes = 1; }
+
+message QueryParamsRequest  {}
+message QueryParamsResponse { GovernanceParams params = 1; }
+
+// ─── Transactions ─────────────────────────────────────────────────────────────
+
+message MsgSubmitProposal {
+  string       proposer                = 1;
+  string       title                   = 2;
+  string       description             = 3;
+  string       seven_generation_impact = 4;
+  ProposalType proposal_type           = 5;
+  repeated string affected_bioregions  = 6;
+}
+message MsgSubmitProposalResponse { uint64 proposal_id = 1; }
+
+message MsgVote {
+  uint64     proposal_id = 1;
+  string     voter       = 2;
+  VoteOption option      = 3;
+  string     rationale   = 4;
+}
+message MsgVoteResponse {}
+
+message MsgVeto {
+  uint64 proposal_id = 1;
+  string guardian    = 2;
+  string reason      = 3;
+}
+message MsgVetoResponse {}
+
+message MsgExecuteProposal {
+  uint64 proposal_id = 1;
+  string executor    = 2;
+}
+message MsgExecuteProposalResponse {}
+
+// ─── Services ─────────────────────────────────────────────────────────────────
+
+service Query {
+  rpc Proposal  (QueryProposalRequest)  returns (QueryProposalResponse);
+  rpc Proposals (QueryProposalsRequest) returns (QueryProposalsResponse);
+  rpc Vote      (QueryVoteRequest)      returns (QueryVoteResponse);
+  rpc Votes     (QueryVotesRequest)     returns (QueryVotesResponse);
+  rpc Params    (QueryParamsRequest)    returns (QueryParamsResponse);
+}
+
+service Msg {
+  rpc SubmitProposal  (MsgSubmitProposal)  returns (MsgSubmitProposalResponse);
+  rpc Vote            (MsgVote)            returns (MsgVoteResponse);
+  rpc Veto            (MsgVeto)            returns (MsgVetoResponse);
+  rpc ExecuteProposal (MsgExecuteProposal) returns (MsgExecuteProposalResponse);
+}

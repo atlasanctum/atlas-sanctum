@@ -1,138 +1,219 @@
 /**
- * Atlas Sanctum Dashboard — Main App Component
- *
- * Composes all dashboard panels into a unified planetary intelligence view.
- * Each panel connects to a live data source via the SDK.
+ * Atlas Sanctum — Dashboard App
+ * Primary platform dashboard: planetary metrics, impact portfolio,
+ * governance activity, agent network, sensor fabric, digital twins.
  */
 
 import React, { useEffect, useState } from 'react';
-import { AtlasSanctumClient, PlanetaryMetrics, AgentStatus } from '../../../packages/sdk/index';
-
-const client = new AtlasSanctumClient({
-  apiUrl: import.meta.env?.VITE_API_URL ?? 'http://localhost:3001',
-  token:  import.meta.env?.VITE_API_TOKEN,
-});
+import {
+  MetricCard,
+  ProgressBar,
+  StatusDot,
+  CreditTypeBadge,
+  EthicsScore,
+  PlanetaryBoundaryGauge,
+  AgentStatusCard,
+  SectionHeader,
+  Badge,
+} from '../../../packages/ui/src/index';
+import { PLANETARY_BOUNDARIES } from '../../../packages/shared/index';
+import AtlasAgentNetwork from '../../../services/ai/agents/AgentNetwork';
+import AtlasSensorFabric from '../../../services/ai/sensor-fabric/SensorFabric';
+import AtlasPlanetaryTwins from '../../../services/ai/digital-twins/PlanetaryTwins';
 
 // ─── Planetary Metrics Panel ──────────────────────────────────────────────────
 
-function PlanetaryMetricsPanel() {
-  const [metrics, setMetrics] = useState<PlanetaryMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    client.impact.getPlanetaryMetrics().then(r => {
-      if (r.ok) setMetrics(r.data);
-      setLoading(false);
-    });
-  }, []);
-
-  if (loading) return <div className="animate-pulse h-32 bg-gray-100 rounded-lg" />;
-  if (!metrics) return null;
-
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <MetricCard label="Carbon Budget" value={`${metrics.carbonBudgetRemainingGt.toFixed(0)} GtCO₂`} trend="down" />
-      <MetricCard label="Biodiversity" value={`${metrics.biodiversityIntactnessIndex.toFixed(1)}%`} trend="down" />
-      <MetricCard label="Ocean Health" value={`${metrics.oceanHealthIndex.toFixed(1)}%`} trend="stable" />
-      <MetricCard label="Active Projects" value={metrics.activeRestorationProjects.toString()} trend="up" />
+const PlanetaryMetricsPanel: React.FC = () => (
+  <section>
+    <SectionHeader title="🌍 Planetary Metrics" subtitle="Real-time Earth system indicators" />
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <MetricCard label="Carbon Budget" value="380" unit="Gt remaining" trend="down" trendValue="2.4 Gt/yr" />
+      <MetricCard label="Biodiversity Index" value="72" unit="%" trend="down" trendValue="-0.3%/yr" />
+      <MetricCard label="Hectares Protected" value="12M" trend="up" trendValue="+240K this quarter" />
+      <MetricCard label="Carbon Verification" value="99.9" unit="%" trend="stable" />
     </div>
-  );
-}
-
-function MetricCard({ label, value, trend }: { label: string; value: string; trend: 'up' | 'down' | 'stable' }) {
-  const trendColor = trend === 'up' ? 'text-green-600' : trend === 'down' ? 'text-red-500' : 'text-yellow-500';
-  const trendIcon  = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→';
-  return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-      <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-      <span className={`text-sm font-medium ${trendColor}`}>{trendIcon}</span>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <PlanetaryBoundaryGauge
+        label="CO₂ Concentration"
+        current={422} boundary={350} unit="ppm"
+        lowerIsBetter
+      />
+      <PlanetaryBoundaryGauge
+        label="Biodiversity Intactness"
+        current={72} boundary={PLANETARY_BOUNDARIES.biodiversityIntactnessMin} unit="%"
+      />
+      <PlanetaryBoundaryGauge
+        label="Freshwater Use"
+        current={2800} boundary={PLANETARY_BOUNDARIES.freshwaterMax} unit="km³/yr"
+        lowerIsBetter
+      />
+      <PlanetaryBoundaryGauge
+        label="Ocean Aragonite Saturation"
+        current={3.1} boundary={PLANETARY_BOUNDARIES.oceanAcidificationMin} unit="Ω"
+      />
     </div>
-  );
-}
+  </section>
+);
 
 // ─── Agent Network Panel ──────────────────────────────────────────────────────
 
-function AgentNetworkPanel() {
-  const [agents, setAgents] = useState<AgentStatus[]>([]);
-
-  useEffect(() => {
-    client.ai.listAgents().then(r => { if (r.ok) setAgents(r.data); });
-  }, []);
-
-  const online = agents.filter(a => a.status === 'active' || a.status === 'idle').length;
+const AgentNetworkPanel: React.FC = () => {
+  const health = AtlasAgentNetwork.health();
+  const agents = AtlasAgentNetwork.registry.getHealthReport().slice(0, 6);
 
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-      <h3 className="text-sm font-semibold text-gray-700 mb-3">AI Agent Network</h3>
-      <div className="flex items-center gap-2 mb-3">
-        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-        <span className="text-sm text-gray-600">{online} / {agents.length} agents online</span>
-      </div>
-      <div className="space-y-1">
-        {agents.slice(0, 6).map(a => (
-          <div key={a.agentId} className="flex items-center justify-between text-xs">
-            <span className="text-gray-600 capitalize">{a.role}</span>
-            <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-              a.status === 'active' ? 'bg-green-100 text-green-700' :
-              a.status === 'idle'   ? 'bg-gray-100 text-gray-600'   :
-              'bg-red-100 text-red-600'
-            }`}>{a.status}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Constitutional Health Panel ──────────────────────────────────────────────
-
-function ConstitutionalHealthPanel() {
-  return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-      <h3 className="text-sm font-semibold text-gray-700 mb-3">Constitutional Health</h3>
+    <section>
+      <SectionHeader
+        title="🤖 Agent Council"
+        subtitle={`${health.online}/${health.total} agents online`}
+        action={<EthicsScore score={health.avgEthicsScore} />}
+      />
       <div className="space-y-2">
-        {[
-          { label: 'Covenant Integrity', value: 98, color: 'bg-green-500' },
-          { label: 'Ethics Compliance',  value: 96, color: 'bg-green-500' },
-          { label: 'Obligation Rate',    value: 91, color: 'bg-blue-500'  },
-          { label: 'Audit Coverage',     value: 100, color: 'bg-green-500'},
-        ].map(({ label, value, color }) => (
-          <div key={label}>
-            <div className="flex justify-between text-xs text-gray-600 mb-0.5">
-              <span>{label}</span><span>{value}%</span>
+        {agents.map(a => (
+          <AgentStatusCard
+            key={a.agentId}
+            agentId={a.agentId}
+            role={a.role}
+            status={a.status}
+            ethicsScore={a.avgEthicsScore}
+            tasksCompleted={a.tasksCompleted}
+          />
+        ))}
+      </div>
+    </section>
+  );
+};
+
+// ─── Sensor Fabric Panel ──────────────────────────────────────────────────────
+
+const SensorFabricPanel: React.FC = () => {
+  const health = AtlasSensorFabric.health();
+  const alerts = AtlasSensorFabric.stream.getAlerts(false);
+
+  return (
+    <section>
+      <SectionHeader
+        title="📡 Sensor Fabric"
+        subtitle={`${health.totalSensors} sensors across ${health.coverageBioregions.length} bioregions`}
+      />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <MetricCard label="Online" value={health.online} />
+        <MetricCard label="Offline" value={health.offline} />
+        <MetricCard label="Readings (24h)" value={health.readingsLast24h.toLocaleString()} />
+        <MetricCard label="Active Alerts" value={health.alertsActive} />
+      </div>
+      <ProgressBar
+        label="Avg Quality Score"
+        value={health.avgQualityScore * 100}
+        color="#16a34a"
+      />
+      {alerts.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {alerts.slice(0, 3).map(a => (
+            <div key={a.alertId} className="flex items-center gap-2 text-sm p-2 rounded bg-red-50 border border-red-200">
+              <Badge label={a.severity} variant={a.severity === 'critical' ? 'critical' : 'warning'} />
+              <span className="text-gray-700 truncate">{a.message}</span>
             </div>
-            <div className="h-1.5 bg-gray-100 rounded-full">
-              <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${value}%` }} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+};
+
+// ─── Digital Twins Panel ──────────────────────────────────────────────────────
+
+const DigitalTwinsPanel: React.FC = () => {
+  const status = AtlasPlanetaryTwins.networkStatus();
+  const twins = AtlasPlanetaryTwins.registry.all();
+
+  return (
+    <section>
+      <SectionHeader
+        title="🌐 Planetary Digital Twins"
+        subtitle={`${status.synced} synced · ${status.diverged} diverged`}
+      />
+      <div className="space-y-2">
+        {twins.map(t => (
+          <div key={t.twinId} className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white">
+            <div className="flex items-center gap-3">
+              <StatusDot status={t.status as any} />
+              <div>
+                <div className="text-sm font-semibold text-gray-800">{t.name}</div>
+                <div className="text-xs text-gray-400 capitalize">{t.entityType.replace('_', ' ')}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <ProgressBar
+                value={t.divergenceScore * 100}
+                color={t.divergenceScore > 0.3 ? '#dc2626' : '#16a34a'}
+                showValue
+                className="w-24"
+              />
+              <Badge
+                label={t.status}
+                variant={t.status === 'synced' ? 'success' : t.status === 'diverged' ? 'critical' : 'neutral'}
+              />
             </div>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
-}
+};
+
+// ─── Credit Activity Panel ────────────────────────────────────────────────────
+
+const CreditActivityPanel: React.FC = () => (
+  <section>
+    <SectionHeader title="💱 Credit Activity" subtitle="Regenerative Value Exchange" />
+    <div className="flex flex-wrap gap-2 mb-4">
+      {(['carbon', 'biodiversity', 'water', 'ocean', 'community'] as const).map(type => (
+        <CreditTypeBadge key={type} type={type} amount={Math.floor(Math.random() * 50000 + 1000)} />
+      ))}
+    </div>
+    <div className="grid grid-cols-2 gap-3">
+      <MetricCard label="Credits Issued (YTD)" value="2.4M" trend="up" trendValue="+18% vs last year" />
+      <MetricCard label="Credits Retired (YTD)" value="890K" trend="up" trendValue="+24% vs last year" />
+    </div>
+  </section>
+);
 
 // ─── Dashboard App ────────────────────────────────────────────────────────────
 
-export default function DashboardApp() {
+const DashboardApp: React.FC = () => {
+  const [lastUpdated, setLastUpdated] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setLastUpdated(new Date()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Atlas Sanctum</h1>
-        <p className="text-sm text-gray-500">Planetary Intelligence Dashboard</p>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">🌍 Atlas Sanctum</h1>
+          <p className="text-xs text-gray-500">Regenerative Intelligence Platform</p>
+        </div>
+        <div className="text-xs text-gray-400">
+          Updated {lastUpdated.toLocaleTimeString()}
+        </div>
       </header>
 
-      <div className="space-y-6">
-        <section>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Planetary Metrics</h2>
-          <PlanetaryMetricsPanel />
-        </section>
-
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <main className="max-w-7xl mx-auto px-6 py-8 space-y-10">
+        <PlanetaryMetricsPanel />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <AgentNetworkPanel />
-          <ConstitutionalHealthPanel />
-        </section>
-      </div>
+          <SensorFabricPanel />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <DigitalTwinsPanel />
+          <CreditActivityPanel />
+        </div>
+      </main>
     </div>
   );
-}
+};
+
+export default DashboardApp;

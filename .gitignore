@@ -644,6 +644,14 @@ plaas/index.ts
 # Plans — internal implementation roadmaps and architecture docs
 plans/
 
+# Internal roadmap files — expose implementation timeline and competitive strategy
+ATLAS_SANCTUM_COMPLETE_IMPLEMENTATION_ROADMAP.md
+ECOSYSTEM_INNOVATION_ROADMAP.md
+ENTERPRISE_DEVELOPMENT_ROADMAP.md
+PHASE_3_IMPLEMENTATION_ROADMAP.md
+PHASE_3_ROADMAP.md
+src/layers/Decentralizedaigovernancedesign-main/IMPLEMENTATION_ROADMAP.md
+
 # sanctum-mvp — internal MVP implementation
 sanctum-mvp/
 
