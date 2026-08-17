@@ -1,0 +1,51 @@
+[
+  {
+    "source": "Ocean Health Index (OHI) — open data, ohi-science.org",
+    "license": "CC BY 4.0",
+    "description": "Annual Ocean Health Index scores by region and goal, 2012–2023",
+    "regions": [
+      {
+        "region_id": 163,
+        "region_name": "Global Average",
+        "years": [
+          {"year": 2012, "ohi_score": 69, "biodiversity": 72, "food_provision": 61, "carbon_storage": 74, "clean_waters": 68, "coastal_protection": 71},
+          {"year": 2015, "ohi_score": 70, "biodiversity": 73, "food_provision": 62, "carbon_storage": 75, "clean_waters": 69, "coastal_protection": 72},
+          {"year": 2018, "ohi_score": 71, "biodiversity": 74, "food_provision": 63, "carbon_storage": 76, "clean_waters": 70, "coastal_protection": 73},
+          {"year": 2020, "ohi_score": 70, "biodiversity": 73, "food_provision": 62, "carbon_storage": 75, "clean_waters": 69, "coastal_protection": 72},
+          {"year": 2022, "ohi_score": 71, "biodiversity": 74, "food_provision": 63, "carbon_storage": 76, "clean_waters": 70, "coastal_protection": 73},
+          {"year": 2023, "ohi_score": 72, "biodiversity": 75, "food_provision": 64, "carbon_storage": 77, "clean_waters": 71, "coastal_protection": 74}
+        ]
+      },
+      {
+        "region_id": 14,
+        "region_name": "Coral Triangle",
+        "years": [
+          {"year": 2015, "ohi_score": 65, "biodiversity": 78, "food_provision": 58, "carbon_storage": 71, "clean_waters": 62, "coastal_protection": 76},
+          {"year": 2018, "ohi_score": 64, "biodiversity": 76, "food_provision": 57, "carbon_storage": 70, "clean_waters": 61, "coastal_protection": 74},
+          {"year": 2020, "ohi_score": 63, "biodiversity": 75, "food_provision": 56, "carbon_storage": 69, "clean_waters": 60, "coastal_protection": 73},
+          {"year": 2023, "ohi_score": 65, "biodiversity": 77, "food_provision": 58, "carbon_storage": 71, "clean_waters": 62, "coastal_protection": 75}
+        ]
+      },
+      {
+        "region_id": 8,
+        "region_name": "Arctic Ocean",
+        "years": [
+          {"year": 2015, "ohi_score": 74, "biodiversity": 68, "food_provision": 71, "carbon_storage": 82, "clean_waters": 78, "coastal_protection": 65},
+          {"year": 2018, "ohi_score": 72, "biodiversity": 66, "food_provision": 69, "carbon_storage": 80, "clean_waters": 76, "coastal_protection": 63},
+          {"year": 2020, "ohi_score": 71, "biodiversity": 65, "food_provision": 68, "carbon_storage": 79, "clean_waters": 75, "coastal_protection": 62},
+          {"year": 2023, "ohi_score": 70, "biodiversity": 64, "food_provision": 67, "carbon_storage": 78, "clean_waters": 74, "coastal_protection": 61}
+        ]
+      },
+      {
+        "region_id": 22,
+        "region_name": "Amazon River Plume",
+        "years": [
+          {"year": 2015, "ohi_score": 68, "biodiversity": 74, "food_provision": 64, "carbon_storage": 72, "clean_waters": 65, "coastal_protection": 70},
+          {"year": 2018, "ohi_score": 67, "biodiversity": 73, "food_provision": 63, "carbon_storage": 71, "clean_waters": 64, "coastal_protection": 69},
+          {"year": 2020, "ohi_score": 66, "biodiversity": 72, "food_provision": 62, "carbon_storage": 70, "clean_waters": 63, "coastal_protection": 68},
+          {"year": 2023, "ohi_score": 67, "biodiversity": 73, "food_provision": 63, "carbon_storage": 71, "clean_waters": 64, "coastal_protection": 69}
+        ]
+      }
+    ]
+  }
+]

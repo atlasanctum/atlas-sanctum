@@ -1,0 +1,662 @@
+# Atlas Sanctum — Kubernetes Service Deployments
+# Covers: ai, analytics, blockchain, identity, payments, frontend, marketplace, governance
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# AI SERVICE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-ai
+  namespace: atlas-production
+  labels:
+    app: atlas-ai
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: atlas-ai
+  template:
+    metadata:
+      labels:
+        app: atlas-ai
+    spec:
+      containers:
+        - name: atlas-ai
+          image: atlas-sanctum/ai-service:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-ai-secrets
+                  key: openai-api-key
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-ai-secrets
+                  key: anthropic-api-key
+            - name: NEO4J_URI
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-neo4j-secrets
+                  key: uri
+            - name: WEAVIATE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: weaviate-url
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-ai
+  namespace: atlas-production
+spec:
+  selector:
+    app: atlas-ai
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# ANALYTICS SERVICE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-analytics
+  namespace: atlas-production
+  labels:
+    app: atlas-analytics
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: atlas-analytics
+  template:
+    metadata:
+      labels:
+        app: atlas-analytics
+    spec:
+      containers:
+        - name: atlas-analytics
+          image: atlas-sanctum/analytics-service:latest
+          ports:
+            - containerPort: 8001
+          env:
+            - name: NEO4J_URI
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-neo4j-secrets
+                  key: uri
+            - name: NEO4J_USER
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-neo4j-secrets
+                  key: username
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-neo4j-secrets
+                  key: password
+            - name: CLICKHOUSE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: clickhouse-url
+            - name: INFLUXDB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: influxdb-url
+            - name: INFLUXDB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-influxdb-secrets
+                  key: token
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-analytics
+  namespace: atlas-production
+spec:
+  selector:
+    app: atlas-analytics
+  ports:
+    - port: 8001
+      targetPort: 8001
+  type: ClusterIP
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# BLOCKCHAIN SERVICE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-blockchain
+  namespace: atlas-production
+  labels:
+    app: atlas-blockchain
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: atlas-blockchain
+  template:
+    metadata:
+      labels:
+        app: atlas-blockchain
+    spec:
+      containers:
+        - name: atlas-blockchain
+          image: atlas-sanctum/blockchain-service:latest
+          ports:
+            - containerPort: 8002
+          env:
+            - name: SANCTUM_RPC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: sanctum-rpc-url
+            - name: ETHEREUM_RPC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-blockchain-secrets
+                  key: ethereum-rpc-url
+            - name: POLYGON_RPC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-blockchain-secrets
+                  key: polygon-rpc-url
+            - name: IPFS_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: ipfs-api-url
+            - name: PINATA_JWT
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-ipfs-secrets
+                  key: pinata-jwt
+            - name: BRIDGE_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: bridge-api-url
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-blockchain
+  namespace: atlas-production
+spec:
+  selector:
+    app: atlas-blockchain
+  ports:
+    - port: 8002
+      targetPort: 8002
+  type: ClusterIP
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# IDENTITY SERVICE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-identity
+  namespace: atlas-production
+  labels:
+    app: atlas-identity
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: atlas-identity
+  template:
+    metadata:
+      labels:
+        app: atlas-identity
+    spec:
+      containers:
+        - name: atlas-identity
+          image: atlas-sanctum/identity-service:latest
+          ports:
+            - containerPort: 8003
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-db-secrets
+                  key: url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-auth-secrets
+                  key: jwt-secret
+            - name: DID_RESOLVER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: did-resolver-url
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 15
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-identity
+  namespace: atlas-production
+spec:
+  selector:
+    app: atlas-identity
+  ports:
+    - port: 8003
+      targetPort: 8003
+  type: ClusterIP
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# PAYMENTS SERVICE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-payments
+  namespace: atlas-production
+  labels:
+    app: atlas-payments
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: atlas-payments
+  template:
+    metadata:
+      labels:
+        app: atlas-payments
+    spec:
+      containers:
+        - name: atlas-payments
+          image: atlas-sanctum/payments-service:latest
+          ports:
+            - containerPort: 8004
+          env:
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-payments-secrets
+                  key: stripe-secret-key
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-payments-secrets
+                  key: stripe-webhook-secret
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-db-secrets
+                  key: url
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 15
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-payments
+  namespace: atlas-production
+spec:
+  selector:
+    app: atlas-payments
+  ports:
+    - port: 8004
+      targetPort: 8004
+  type: ClusterIP
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# FRONTEND (Dashboard + Marketplace + Governance)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-frontend
+  namespace: atlas-production
+  labels:
+    app: atlas-frontend
+    version: v1.0.0
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: atlas-frontend
+  template:
+    metadata:
+      labels:
+        app: atlas-frontend
+    spec:
+      containers:
+        - name: atlas-frontend
+          image: atlas-sanctum/frontend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: VITE_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: api-url
+            - name: VITE_SUPABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: supabase-url
+            - name: VITE_SUPABASE_ANON_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-supabase-secrets
+                  key: anon-key
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-frontend
+  namespace: atlas-production
+spec:
+  selector:
+    app: atlas-frontend
+  ports:
+    - port: 3000
+      targetPort: 3000
+  type: ClusterIP
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# REDIS (caching, sessions, rate limiting)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-redis
+  namespace: atlas-production
+  labels:
+    app: atlas-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlas-redis
+  template:
+    metadata:
+      labels:
+        app: atlas-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          args: ["--requirepass", "$(REDIS_PASSWORD)"]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-redis-secrets
+                  key: password
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: atlas-redis-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-redis
+  namespace: atlas-production
+spec:
+  selector:
+    app: atlas-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: atlas-redis-pvc
+  namespace: atlas-production
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# IPFS NODE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-ipfs
+  namespace: atlas-production
+  labels:
+    app: atlas-ipfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlas-ipfs
+  template:
+    metadata:
+      labels:
+        app: atlas-ipfs
+    spec:
+      containers:
+        - name: ipfs
+          image: ipfs/kubo:v0.27.0
+          ports:
+            - containerPort: 5001  # API
+            - containerPort: 8080  # Gateway
+            - containerPort: 4001  # Swarm
+          env:
+            - name: IPFS_PROFILE
+              value: server
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          volumeMounts:
+            - name: ipfs-data
+              mountPath: /data/ipfs
+      volumes:
+        - name: ipfs-data
+          persistentVolumeClaim:
+            claimName: atlas-ipfs-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-ipfs
+  namespace: atlas-production
+spec:
+  selector:
+    app: atlas-ipfs
+  ports:
+    - name: api
+      port: 5001
+      targetPort: 5001
+    - name: gateway
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: atlas-ipfs-pvc
+  namespace: atlas-production
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# INGRESS
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: atlas-ingress
+  namespace: atlas-production
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  tls:
+    - hosts:
+        - api.atlassanctum.com
+        - app.atlassanctum.com
+        - ipfs.atlassanctum.com
+      secretName: atlas-tls
+  rules:
+    - host: api.atlassanctum.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: atlas-api
+                port:
+                  number: 4000
+    - host: app.atlassanctum.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: atlas-frontend
+                port:
+                  number: 3000
+    - host: ipfs.atlassanctum.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: atlas-ipfs
+                port:
+                  number: 8080

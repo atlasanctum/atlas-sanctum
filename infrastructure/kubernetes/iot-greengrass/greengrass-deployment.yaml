@@ -1,0 +1,292 @@
+# Atlas Sanctum — AWS IoT Greengrass Kubernetes Deployment
+# Runs Greengrass nucleus as a pod, bridges MQTT sensor telemetry to the platform.
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# NAMESPACE
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atlas-iot
+  labels:
+    app: atlas-greengrass
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# SERVICE ACCOUNT (for AWS IoT Core access via IRSA)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlas-greengrass
+  namespace: atlas-iot
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/AtlasGreengrassRole
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGMAP — Greengrass nucleus config
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: greengrass-config
+  namespace: atlas-iot
+data:
+  config.yaml: |
+    ---
+    system:
+      certificateFilePath: /greengrass/certs/device.pem.crt
+      privateKeyPath: /greengrass/certs/private.pem.key
+      rootCaPath: /greengrass/certs/AmazonRootCA1.pem
+      rootpath: /greengrass/v2
+      thingName: atlas-sanctum-greengrass-bridge
+    services:
+      aws.greengrass.Nucleus:
+        version: "2.12.0"
+        configuration:
+          awsRegion: us-east-1
+          iotRoleAlias: GreengrassCoreTokenExchangeRoleAlias
+          iotDataEndpoint: ${IOT_DATA_ENDPOINT}
+          iotCredEndpoint: ${IOT_CRED_ENDPOINT}
+          mqtt:
+            port: 8883
+          logging:
+            level: INFO
+      aws.greengrass.clientdevices.Auth:
+        version: "2.5.0"
+        configuration:
+          deviceGroups:
+            formatVersion: "2021-03-05"
+            definitions:
+              AtlasSensors:
+                selectionRule: "thingName: atlas-sensor-*"
+                policyName: AtlasSensorPolicy
+            policies:
+              AtlasSensorPolicy:
+                AllowConnect:
+                  statementDescription: Allow sensor devices to connect
+                  operations: ["mqtt:connect"]
+                  resources: ["*"]
+                AllowPublish:
+                  statementDescription: Allow sensors to publish telemetry
+                  operations: ["mqtt:publish"]
+                  resources: ["atlas/sensors/*/telemetry"]
+      aws.greengrass.clientdevices.mqtt.Bridge:
+        version: "2.3.0"
+        configuration:
+          mqttTopicMapping:
+            SensorTelemetryToCloud:
+              topic: "atlas/sensors/+/telemetry"
+              source: LocalMqtt
+              target: IotCore
+            CommandsToSensors:
+              topic: "atlas/sensors/+/commands"
+              source: IotCore
+              target: LocalMqtt
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# SECRET — IoT certificates (populated by cert-manager or external-secrets)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: greengrass-certs
+  namespace: atlas-iot
+type: Opaque
+data:
+  # Base64-encoded values injected by CI/CD or external-secrets operator
+  device.pem.crt: ""
+  private.pem.key: ""
+  AmazonRootCA1.pem: ""
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPLOYMENT — Greengrass nucleus
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-greengrass
+  namespace: atlas-iot
+  labels:
+    app: atlas-greengrass
+    version: v2.12.0
+spec:
+  replicas: 1  # Greengrass nucleus is stateful — single replica per edge site
+  selector:
+    matchLabels:
+      app: atlas-greengrass
+  template:
+    metadata:
+      labels:
+        app: atlas-greengrass
+    spec:
+      serviceAccountName: atlas-greengrass
+      hostNetwork: false
+      containers:
+        - name: greengrass
+          image: amazon/aws-iot-greengrass:2.12.0
+          securityContext:
+            privileged: false
+            capabilities:
+              add: ["SYS_PTRACE"]
+          ports:
+            - containerPort: 8883  # MQTT TLS
+            - containerPort: 8443  # MQTT WebSocket
+          env:
+            - name: AWS_REGION
+              value: us-east-1
+            - name: IOT_DATA_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-iot-secrets
+                  key: iot-data-endpoint
+            - name: IOT_CRED_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-iot-secrets
+                  key: iot-cred-endpoint
+            - name: GGC_ROOT_PATH
+              value: /greengrass/v2
+          volumeMounts:
+            - name: greengrass-config
+              mountPath: /greengrass/v2/config
+              readOnly: true
+            - name: greengrass-certs
+              mountPath: /greengrass/certs
+              readOnly: true
+            - name: greengrass-data
+              mountPath: /greengrass/v2
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "test -f /greengrass/v2/alts/current/distro/bin/greengrass-nucleus-lite"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: greengrass-config
+          configMap:
+            name: greengrass-config
+        - name: greengrass-certs
+          secret:
+            secretName: greengrass-certs
+        - name: greengrass-data
+          persistentVolumeClaim:
+            claimName: greengrass-data-pvc
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: greengrass-data-pvc
+  namespace: atlas-iot
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# SERVICE — MQTT broker (for local sensor devices)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-greengrass-mqtt
+  namespace: atlas-iot
+  labels:
+    app: atlas-greengrass
+spec:
+  selector:
+    app: atlas-greengrass
+  ports:
+    - name: mqtt-tls
+      port: 8883
+      targetPort: 8883
+    - name: mqtt-ws
+      port: 8443
+      targetPort: 8443
+  type: LoadBalancer  # Exposed to edge sensor network
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# MQTT BRIDGE SIDECAR DEPLOYMENT
+# Reads from IoT Core, pushes to Atlas API /api/sensors/ingest
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-mqtt-bridge
+  namespace: atlas-iot
+  labels:
+    app: atlas-mqtt-bridge
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: atlas-mqtt-bridge
+  template:
+    metadata:
+      labels:
+        app: atlas-mqtt-bridge
+    spec:
+      serviceAccountName: atlas-greengrass
+      containers:
+        - name: mqtt-bridge
+          image: atlas-sanctum/mqtt-bridge:latest
+          env:
+            - name: MQTT_BROKER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-iot-secrets
+                  key: mqtt-broker-url
+            - name: MQTT_TOPIC
+              value: "atlas/sensors/+/telemetry"
+            - name: ATLAS_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: api-url
+            - name: ATLAS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-iot-secrets
+                  key: api-key
+            - name: AWS_REGION
+              value: us-east-1
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 15
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-mqtt-bridge
+  namespace: atlas-iot
+spec:
+  selector:
+    app: atlas-mqtt-bridge
+  ports:
+    - port: 9090
+      targetPort: 9090
+  type: ClusterIP

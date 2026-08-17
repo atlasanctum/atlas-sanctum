@@ -1,0 +1,78 @@
+[
+  {
+    "source": "GIIN Annual Impact Investor Survey + BloombergNEF + voluntary carbon market data",
+    "license": "CC BY 4.0",
+    "description": "Global regenerative and impact finance flows 2015–2023 (USD billions)",
+    "series": [
+      {
+        "category": "Impact Investing",
+        "unit": "USD_billions",
+        "data": [
+          {"year": 2015, "value": 77.4, "yoy_growth_pct": 18.2},
+          {"year": 2016, "value": 114.0, "yoy_growth_pct": 47.3},
+          {"year": 2017, "value": 228.1, "yoy_growth_pct": 100.1},
+          {"year": 2018, "value": 502.0, "yoy_growth_pct": 120.1},
+          {"year": 2019, "value": 715.0, "yoy_growth_pct": 42.4},
+          {"year": 2020, "value": 715.0, "yoy_growth_pct": 0.0},
+          {"year": 2021, "value": 1164.0, "yoy_growth_pct": 62.8},
+          {"year": 2022, "value": 1146.0, "yoy_growth_pct": -1.5},
+          {"year": 2023, "value": 1571.0, "yoy_growth_pct": 37.1}
+        ]
+      },
+      {
+        "category": "Voluntary Carbon Market",
+        "unit": "USD_billions",
+        "data": [
+          {"year": 2015, "value": 0.32, "volume_mt_co2": 84.0},
+          {"year": 2016, "value": 0.19, "volume_mt_co2": 63.0},
+          {"year": 2017, "value": 0.19, "volume_mt_co2": 63.0},
+          {"year": 2018, "value": 0.30, "volume_mt_co2": 98.0},
+          {"year": 2019, "value": 0.52, "volume_mt_co2": 104.0},
+          {"year": 2020, "value": 0.47, "volume_mt_co2": 95.0},
+          {"year": 2021, "value": 1.98, "volume_mt_co2": 362.0},
+          {"year": 2022, "value": 1.99, "volume_mt_co2": 164.0},
+          {"year": 2023, "value": 0.72, "volume_mt_co2": 149.0}
+        ]
+      },
+      {
+        "category": "Renewable Energy Investment",
+        "unit": "USD_billions",
+        "data": [
+          {"year": 2015, "value": 286.0, "solar_pct": 33, "wind_pct": 42},
+          {"year": 2016, "value": 241.6, "solar_pct": 36, "wind_pct": 40},
+          {"year": 2017, "value": 279.8, "solar_pct": 42, "wind_pct": 38},
+          {"year": 2018, "value": 272.9, "solar_pct": 44, "wind_pct": 36},
+          {"year": 2019, "value": 282.2, "solar_pct": 46, "wind_pct": 35},
+          {"year": 2020, "value": 303.5, "solar_pct": 48, "wind_pct": 34},
+          {"year": 2021, "value": 366.0, "solar_pct": 50, "wind_pct": 33},
+          {"year": 2022, "value": 495.0, "solar_pct": 52, "wind_pct": 32},
+          {"year": 2023, "value": 623.0, "solar_pct": 55, "wind_pct": 30}
+        ]
+      },
+      {
+        "category": "Regenerative Agriculture Finance",
+        "unit": "USD_billions",
+        "data": [
+          {"year": 2018, "value": 0.8},
+          {"year": 2019, "value": 1.2},
+          {"year": 2020, "value": 2.1},
+          {"year": 2021, "value": 4.8},
+          {"year": 2022, "value": 7.2},
+          {"year": 2023, "value": 11.4}
+        ]
+      },
+      {
+        "category": "Blue Finance (Ocean)",
+        "unit": "USD_billions",
+        "data": [
+          {"year": 2018, "value": 0.4},
+          {"year": 2019, "value": 0.7},
+          {"year": 2020, "value": 1.1},
+          {"year": 2021, "value": 2.4},
+          {"year": 2022, "value": 3.8},
+          {"year": 2023, "value": 5.9}
+        ]
+      }
+    ]
+  }
+]

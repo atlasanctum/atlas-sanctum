@@ -423,22 +423,22 @@ atlas-sanctum/
 - Node.js (Express — primary API)
 - Python (AI/ML services, Earth2Studio)
 - Go (Cosmos SDK blockchain)
-- Rust (planned — ZK proof generation)
+- Rust (ZK proof generation — `services/blockchain/zk/`, in development)
 
 ## AI
 
 - OpenAI / Anthropic (LLM providers with circuit-breaker fallback)
 - Earth2Studio (NVIDIA — climate AI)
 - Vector Databases (Weaviate)
-- LangGraph (planned — agent orchestration)
-- PyTorch / TensorFlow (planned — custom model training)
+- LangGraph (agent orchestration — `services/ai/langgraph/atlas_agent_graph.py`)
+- PyTorch / TensorFlow (custom model training — `services/ai/gpu/verifier.py`)
 
 ## Blockchain
 
 - Cosmos SDK (sanctum-1 — native chain)
 - Ethereum / Polygon (smart contracts, carbon credits)
 - IPFS (decentralized storage)
-- Chainlink (planned — oracle network)
+- Chainlink (oracle network — `services/blockchain/oracle/`)
 
 ## Cloud
 
@@ -452,9 +452,9 @@ atlas-sanctum/
 
 - PostgreSQL + Supabase (primary — auth, RLS, realtime)
 - Redis (caching, sessions, rate limiting)
-- Neo4j (planned — knowledge graph)
-- ClickHouse (planned — analytics time-series)
-- InfluxDB (planned — IoT sensor streams)
+- Neo4j (knowledge graph — `services/analytics/neo4j/KnowledgeGraph.ts`)
+- ClickHouse (analytics time-series — `services/analytics/clickhouse/`)
+- InfluxDB (IoT sensor streams — `services/analytics/influxdb/`)
 
 ## Observability
 
@@ -554,6 +554,16 @@ npm run dev
 - ✅ LangGraph Agent Orchestration (OpenAI/Anthropic with constitutional pre-flight)
 - ✅ Neo4j Knowledge Graph (production driver wired, in-memory fallback for dev)
 - ✅ Mobile App (React Native Expo — 5 screens, offline queue, GPS, DAO voting)
+- ✅ Full OpenAPI v1 Spec (`docs/openapi.yaml` — 50+ endpoints across all domains)
+- ✅ IPFS Storage Service (`services/blockchain/ipfs/` — Kubo + Pinata pinning)
+- ✅ Cross-Chain Bridge (`services/blockchain/bridge/` — EVM ↔ sanctum-1 lock/mint + IBC)
+- ✅ Chainlink Oracle Integration (`services/blockchain/oracle/` — price feeds + carbon credit pricing)
+- ✅ ClickHouse Analytics (`services/analytics/clickhouse/` — time-series CQRS read model)
+- ✅ InfluxDB IoT Streams (`services/analytics/influxdb/` — sensor telemetry write/query)
+- ✅ Kubernetes Deployments (`infrastructure/kubernetes/deployments/` — all 8 services + ingress)
+- ✅ IoT Greengrass K8s Config (`infrastructure/kubernetes/iot-greengrass/` — nucleus + MQTT bridge)
+- ✅ Open Datasets (`datasets/` — forest cover, ocean health, regenerative finance, HDI)
+- ✅ Open Research (`research/` — climate tipping points, DAO governance, FPIC protocols)
 
 ---
 

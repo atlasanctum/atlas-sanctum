@@ -958,3 +958,11 @@ docs/legal/
 docs/security/
 docs/private/
 docs/roadmaps/
+
+
+# =============================================================================
+# X ALGORITHM — Third-party source code, not part of Atlas Sanctum
+# This directory was included in error and must not be committed.
+# =============================================================================
+
+x-algorithm/
