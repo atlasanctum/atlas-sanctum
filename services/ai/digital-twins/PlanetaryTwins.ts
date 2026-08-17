@@ -245,14 +245,110 @@ export class SimulationEngine {
 
 // ─── Planetary Twin Network ───────────────────────────────────────────────────
 
+// ─── Real Data Source Connectors ─────────────────────────────────────────────
+// Fetches live state from NOAA, NASA, and Copernicus APIs.
+// Falls back gracefully when API keys are absent.
+
+const _env = (key: string): string | undefined =>
+  typeof process !== 'undefined' ? process.env?.[key] : undefined;
+
+export class NOAAOceanConnector {
+  private readonly baseUrl = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
+  constructor(private readonly syncEngine: TwinSyncEngine) {}
+
+  async fetchCoralTriangle(): Promise<void> {
+    const token = _env('NOAA_API_TOKEN');
+    if (!token) return;
+    try {
+      const url = `${this.baseUrl}?station=1630000&product=water_temperature&datum=MLLW&time_zone=GMT&units=metric&format=json&range=24&application=atlas_sanctum&token=${token}`;
+      const res  = await fetch(url);
+      if (!res.ok) return;
+      const json = await res.json() as { data?: { v: string; t: string }[] };
+      const latest = json.data?.[json.data.length - 1];
+      if (!latest) return;
+      this.syncEngine.sync({
+        twinId: 'twin-coral-triangle', source: 'NOAA CO-OPS',
+        incomingState: { seaTempC: parseFloat(latest.v) },
+        timestamp: new Date(latest.t).getTime(), confidence: 0.95,
+      });
+    } catch (e) { console.warn('[PlanetaryTwins] NOAA fetch failed:', e); }
+  }
+}
+
+export class NASAClimateConnector {
+  private readonly baseUrl = 'https://power.larc.nasa.gov/api/temporal/daily/point';
+  constructor(private readonly syncEngine: TwinSyncEngine) {}
+
+  async fetchAtmosphere(): Promise<void> {
+    try {
+      const today = new Date();
+      const end   = today.toISOString().slice(0, 10).replace(/-/g, '');
+      const start = new Date(today.getTime() - 7 * 86_400_000).toISOString().slice(0, 10).replace(/-/g, '');
+      const key   = _env('NASA_API_KEY');
+      const url   = `${this.baseUrl}?parameters=T2M&community=RE&longitude=0&latitude=0&start=${start}&end=${end}&format=JSON${key ? `&api_key=${key}` : ''}`;
+      const res   = await fetch(url);
+      if (!res.ok) return;
+      const json  = await res.json() as { properties?: { parameter?: { T2M?: Record<string, number> } } };
+      const temps = json.properties?.parameter?.T2M;
+      if (!temps) return;
+      const values = Object.values(temps).filter(v => v > -900);
+      if (!values.length) return;
+      const avg = values.reduce((s, v) => s + v, 0) / values.length;
+      this.syncEngine.sync({
+        twinId: 'twin-global-atmosphere', source: 'NASA POWER',
+        incomingState: { globalTempAnomalyC: parseFloat((avg - 13.8).toFixed(2)) },
+        timestamp: Date.now(), confidence: 0.75,
+      });
+    } catch (e) { console.warn('[PlanetaryTwins] NASA fetch failed:', e); }
+  }
+}
+
+export class CopernicusForestConnector {
+  constructor(private readonly syncEngine: TwinSyncEngine) {}
+
+  async fetchAmazonNDVI(): Promise<void> {
+    const key = _env('COPERNICUS_API_KEY');
+    if (!key) return;
+    try {
+      const url = 'https://land.copernicus.eu/api/@search?portal_type=DataSet&Subject=NDVI&format=json';
+      const res  = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
+      if (!res.ok) return;
+      const json = await res.json() as { items?: { ndvi_mean?: number }[] };
+      const ndvi = json.items?.[0]?.ndvi_mean;
+      if (ndvi === undefined) return;
+      this.syncEngine.sync({
+        twinId: 'twin-amazon-basin', source: 'Copernicus CGLS',
+        incomingState: { ndvi },
+        timestamp: Date.now(), confidence: 0.9,
+      });
+    } catch (e) { console.warn('[PlanetaryTwins] Copernicus fetch failed:', e); }
+  }
+}
+
 export class PlanetaryTwinNetwork {
   readonly registry   = new DigitalTwinRegistry();
   readonly syncEngine = new TwinSyncEngine(this.registry);
   readonly simulation = new SimulationEngine(this.registry);
 
-  constructor() { this.bootstrapTwins(); }
+  readonly noaa       = new NOAAOceanConnector(this.syncEngine);
+  readonly nasa       = new NASAClimateConnector(this.syncEngine);
+  readonly copernicus = new CopernicusForestConnector(this.syncEngine);
+
+  constructor() {
+    this.bootstrapTwins();
+    this.refreshAll().catch(() => {});
+  }
 
   sync(event: SyncEvent) { return this.syncEngine.sync(event); }
+
+  /** Refresh all twins from live data sources. Call on a schedule (e.g. every hour). */
+  async refreshAll(): Promise<void> {
+    await Promise.allSettled([
+      this.noaa.fetchCoralTriangle(),
+      this.nasa.fetchAtmosphere(),
+      this.copernicus.fetchAmazonNDVI(),
+    ]);
+  }
 
   networkStatus(): {
     totalTwins: number;

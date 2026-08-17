@@ -266,6 +266,43 @@ export class Neo4jKnowledgeGraph {
   }
 }
 
+// ─── Production Neo4j Driver Adapter ─────────────────────────────────────────
+// Wraps the real neo4j-driver when NEO4J_URI is set; falls back to in-memory.
+
+class ProductionNeo4jAdapter implements Neo4jDriver {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private driver: any;
+
+  constructor(uri: string, user: string, password: string) {
+    // Dynamic require so the module is optional in environments without neo4j-driver
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const neo4j = require('neo4j-driver');
+    this.driver = neo4j.driver(uri, neo4j.auth.basic(user, password), {
+      maxConnectionPoolSize: 50,
+      connectionAcquisitionTimeout: 10_000,
+    });
+  }
+
+  session(config?: { database?: string }): Neo4jSession {
+    const s = this.driver.session({ database: config?.database ?? 'neo4j' });
+    return {
+      async run(query: string, params?: Record<string, unknown>) {
+        const result = await s.run(query, params);
+        return {
+          records: result.records.map((r: any) => ({
+            get: (key: string) => r.get(key),
+            keys: r.keys,
+          })),
+        };
+      },
+      async close() { await s.close(); },
+    };
+  }
+
+  async close(): Promise<void> { await this.driver.close(); }
+  async verifyConnectivity(): Promise<void> { await this.driver.verifyConnectivity(); }
+}
+
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 export function createNeo4jGraph(config?: {
@@ -274,11 +311,22 @@ export function createNeo4jGraph(config?: {
   password?: string;
   database?: string;
 }): Neo4jKnowledgeGraph {
-  // Production: import neo4j-driver and pass real driver
-  // const driver = neo4j.driver(config.uri, neo4j.auth.basic(config.user, config.password));
-  // return new Neo4jKnowledgeGraph(driver, config.database);
-  return new Neo4jKnowledgeGraph(undefined, config?.database);
+  const uri      = config?.uri      ?? (typeof process !== 'undefined' ? process.env?.NEO4J_URI      : undefined);
+  const user     = config?.user     ?? (typeof process !== 'undefined' ? process.env?.NEO4J_USER     : undefined) ?? 'neo4j';
+  const password = config?.password ?? (typeof process !== 'undefined' ? process.env?.NEO4J_PASSWORD : undefined);
+  const database = config?.database ?? 'atlas-knowledge';
+
+  if (uri && password) {
+    try {
+      const driver = new ProductionNeo4jAdapter(uri, user, password);
+      return new Neo4jKnowledgeGraph(driver, database);
+    } catch (e) {
+      console.warn('[Neo4jKnowledgeGraph] neo4j-driver unavailable, using in-memory adapter:', e);
+    }
+  }
+
+  return new Neo4jKnowledgeGraph(undefined, database);
 }
 
-export const AtlasKnowledgeGraph = createNeo4jGraph({ database: 'atlas-knowledge' });
+export const AtlasKnowledgeGraph = createNeo4jGraph();
 export default AtlasKnowledgeGraph;

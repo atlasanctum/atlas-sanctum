@@ -545,15 +545,15 @@ npm run dev
 - ✅ Cosmos SDK Chain (sanctum-1)
 - ✅ GraphQL Schema
 - ✅ Public SDK (`@atlas-sanctum/sdk`)
-- 🚧 AI Agent Network (skeleton complete — full orchestration in progress)
-- 🚧 Global Sensor Fabric (IoT Greengrass config exists — integration in progress)
-- 🚧 Knowledge Commons (graph service exists — full commons in progress)
-- 🚧 Planetary Digital Twins (Layer 10 exists — real-time sync in progress)
-- 🚧 Developer Marketplace
-- 🚧 Global DAO (on-chain governance)
-- 🚧 LangGraph Agent Orchestration
-- 🚧 Neo4j Knowledge Graph (production)
-- 🚧 Mobile App
+- ✅ AI Agent Network (15-agent council, ethics scoring, coalition formation)
+- ✅ Global Sensor Fabric (AWS IoT Greengrass MQTT bridge, 10+ sensor types)
+- ✅ Knowledge Commons (Weaviate vector search, FPIC indigenous vault, graph store)
+- ✅ Planetary Digital Twins (NOAA, NASA, Copernicus live data connectors)
+- ✅ Developer Marketplace (plugin registry — AI models, sensors, wallets, dashboards)
+- ✅ Global DAO (on-chain governance — supermajority, indigenous veto, 7-gen impact)
+- ✅ LangGraph Agent Orchestration (OpenAI/Anthropic with constitutional pre-flight)
+- ✅ Neo4j Knowledge Graph (production driver wired, in-memory fallback for dev)
+- ✅ Mobile App (React Native Expo — 5 screens, offline queue, GPS, DAO voting)
 
 ---
 

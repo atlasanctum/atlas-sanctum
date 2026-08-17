@@ -266,14 +266,116 @@ export class SensorAggregator {
   }
 }
 
+// ─── AWS IoT Greengrass MQTT Bridge ──────────────────────────────────────────
+// Subscribes to AWS IoT Core topics and feeds readings into the SensorStream.
+// Topic pattern: atlas/sensors/{sensorId}/telemetry
+// Requires: MQTT_BROKER_URL, MQTT_CLIENT_CERT, MQTT_CLIENT_KEY, MQTT_CA_CERT
+// Falls back to no-op when env vars are absent (dev/test).
+
+export interface MQTTBridgeConfig {
+  brokerUrl?: string;
+  clientCert?: string;
+  clientKey?: string;
+  caCert?: string;
+  clientId?: string;
+  topicPrefix?: string;
+}
+
+export class GreengrassMQTTBridge {
+  private connected = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private client: any = null;
+
+  constructor(
+    private readonly stream: SensorStream,
+    private readonly config: MQTTBridgeConfig = {},
+  ) {}
+
+  async connect(): Promise<void> {
+    const brokerUrl  = this.config.brokerUrl  ?? (typeof process !== 'undefined' ? process.env?.MQTT_BROKER_URL  : undefined);
+    const clientCert = this.config.clientCert ?? (typeof process !== 'undefined' ? process.env?.MQTT_CLIENT_CERT : undefined);
+    const clientKey  = this.config.clientKey  ?? (typeof process !== 'undefined' ? process.env?.MQTT_CLIENT_KEY  : undefined);
+    const caCert     = this.config.caCert     ?? (typeof process !== 'undefined' ? process.env?.MQTT_CA_CERT     : undefined);
+
+    if (!brokerUrl || !clientCert || !clientKey || !caCert) {
+      console.info('[SensorFabric] MQTT env vars not set — Greengrass bridge disabled (dev mode)');
+      return;
+    }
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const mqtt = require('mqtt');
+      this.client = mqtt.connect(brokerUrl, {
+        clientId: this.config.clientId ?? `atlas-sensor-fabric-${Date.now()}`,
+        cert: clientCert,
+        key:  clientKey,
+        ca:   caCert,
+        protocol: 'mqtts',
+        rejectUnauthorized: true,
+      });
+
+      this.client.on('connect', () => {
+        this.connected = true;
+        const prefix = this.config.topicPrefix ?? 'atlas/sensors';
+        this.client.subscribe(`${prefix}/+/telemetry`, { qos: 1 });
+        console.info('[SensorFabric] Greengrass MQTT bridge connected:', brokerUrl);
+      });
+
+      this.client.on('message', (topic: string, payload: Buffer) => {
+        try {
+          const parts    = topic.split('/');
+          const sensorId = parts[parts.length - 2];
+          const raw      = JSON.parse(payload.toString()) as Record<string, unknown>;
+          const reading: SensorReading = {
+            readingId:    `mqtt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            sensorId,
+            type:         (raw['type'] as SensorType) ?? 'soil_probe',
+            timestamp:    typeof raw['timestamp'] === 'number' ? raw['timestamp'] : Date.now(),
+            location:     (raw['location'] as { lat: number; lng: number }) ?? { lat: 0, lng: 0 },
+            measurements: (raw['measurements'] as Measurement[]) ?? [],
+            qualityScore: typeof raw['qualityScore'] === 'number' ? raw['qualityScore'] : 0.8,
+            anomalyFlag:  Boolean(raw['anomalyFlag']),
+            rawPayload:   raw,
+          };
+          this.stream.ingest(reading);
+        } catch (e) {
+          console.warn('[SensorFabric] Failed to parse MQTT message on topic', topic, e);
+        }
+      });
+
+      this.client.on('error', (err: Error) => {
+        console.error('[SensorFabric] MQTT error:', err.message);
+      });
+    } catch (e) {
+      console.warn('[SensorFabric] mqtt package unavailable, bridge disabled:', e);
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.client) {
+      await new Promise<void>(resolve => this.client.end(false, {}, resolve));
+      this.connected = false;
+    }
+  }
+
+  isConnected(): boolean { return this.connected; }
+}
+
 // ─── Global Sensor Fabric ─────────────────────────────────────────────────────
 
 export class GlobalSensorFabric {
   readonly registry   = new SensorRegistry();
   readonly stream     = new SensorStream();
   readonly aggregator = new SensorAggregator(this.registry, this.stream);
+  readonly mqttBridge: GreengrassMQTTBridge;
 
-  constructor() { this.bootstrapSensors(); }
+  constructor(mqttConfig?: MQTTBridgeConfig) {
+    this.mqttBridge = new GreengrassMQTTBridge(this.stream, mqttConfig);
+    this.bootstrapSensors();
+    this.mqttBridge.connect().catch(e =>
+      console.warn('[SensorFabric] MQTT bridge connect error:', e)
+    );
+  }
 
   ingest(reading: SensorReading): void {
     this.stream.ingest(reading);
