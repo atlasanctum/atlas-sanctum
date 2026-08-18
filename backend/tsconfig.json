@@ -11,10 +11,11 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "ignoreDeprecations": "6.0",
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
-    "downlevelIteration": true,
-    "noEmitOnError": false
+    "noEmitOnError": true,
+    "downlevelIteration": false
   },
   "include": ["src"],
   "exclude": [
