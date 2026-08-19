@@ -660,3 +660,137 @@ spec:
                 name: atlas-ipfs
                 port:
                   number: 8080
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENT SERVICE (LangGraph — Python FastAPI)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-agent-service
+  namespace: atlas-production
+  labels:
+    app: atlas-agent-service
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: atlas-agent-service
+  template:
+    metadata:
+      labels:
+        app: atlas-agent-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: atlas-agent-service
+          image: atlas-sanctum/agent-service:latest
+          ports:
+            - containerPort: 8001
+          env:
+            - name: AGENT_SERVICE_PORT
+              value: "8001"
+            - name: NODE_ENV
+              value: production
+            - name: AGENT_SERVICE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-agent-secrets
+                  key: agent-service-secret
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-ai-secrets
+                  key: openai-api-key
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-ai-secrets
+                  key: anthropic-api-key
+            - name: NEO4J_URI
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-neo4j-secrets
+                  key: uri
+            - name: NEO4J_USER
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-neo4j-secrets
+                  key: username
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-neo4j-secrets
+                  key: password
+            - name: WEAVIATE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: atlas-config
+                  key: weaviate-url
+            - name: OPENAI_DEFAULT_MODEL
+              value: gpt-4o
+            - name: ANTHROPIC_DEFAULT_MODEL
+              value: claude-3-5-sonnet-20241022
+            - name: LLM_REQUEST_TIMEOUT_MS
+              value: "30000"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-agent-service
+  namespace: atlas-production
+spec:
+  selector:
+    app: atlas-agent-service
+  ports:
+    - port: 8001
+      targetPort: 8001
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: atlas-agent-service
+  namespace: atlas-production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: atlas-agent-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

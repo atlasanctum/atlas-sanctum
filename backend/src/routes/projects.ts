@@ -1,16 +1,25 @@
 import express, { Request, Response } from 'express';
 import { query } from '../db';
+import { authenticate, authorize, AuthenticatedRequest } from '../middleware/auth';
 
 const router = express.Router();
 
-// Get All Projects
-router.get('/', async (req: Request, res: Response) => {
+// Get All Projects — admins see all, authenticated users see their own + approved
+router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const { status, bioregion, page = 1, size = 20 } = req.query as any;
   const offset = (Number(page) - 1) * Number(size);
+  const user = req.user!;
+  const isAdmin = user.role === 'admin';
 
   try {
     let q = 'SELECT * FROM carbon_projects WHERE 1=1';
     const params: any[] = [];
+
+    // Non-admins only see their own projects or approved ones
+    if (!isAdmin) {
+      q += ` AND (owner_id = $${params.length + 1} OR status = 'approved')`;
+      params.push(user.id);
+    }
 
     if (status) {
       q += ` AND status = $${params.length + 1}`;
@@ -26,7 +35,9 @@ router.get('/', async (req: Request, res: Response) => {
     params.push(Number(size), offset);
 
     const result = await query(q, params);
-    const countResult = await query('SELECT COUNT(*) as total FROM carbon_projects');
+    const countResult = isAdmin
+      ? await query('SELECT COUNT(*) as total FROM carbon_projects')
+      : await query('SELECT COUNT(*) as total FROM carbon_projects WHERE owner_id = $1 OR status = $2', [user.id, 'approved']);
     const total = parseInt(countResult.rows[0].total);
 
     res.json({
@@ -73,9 +84,10 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // Create New Project
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const ownerId = user.id; // always scoped to authenticated user
   const {
-    ownerId,
     name,
     description,
     location,
@@ -88,8 +100,8 @@ router.post('/', async (req: Request, res: Response) => {
     healthImpactScore
   } = req.body;
 
-  if (!ownerId || !name || !projectType) {
-    return res.status(422).json({ code: 'invalid', message: 'ownerId, name, and projectType required' });
+  if (!name || !projectType) {
+    return res.status(422).json({ code: 'invalid', message: 'name and projectType required' });
   }
 
   try {
@@ -122,8 +134,17 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// Update Project
-router.put('/:id', async (req: Request, res: Response) => {
+// Update Project — owner or admin only
+router.put('/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const isAdmin = user.role === 'admin';
+
+  // Verify ownership unless admin
+  if (!isAdmin) {
+    const ownerCheck = await query('SELECT owner_id FROM carbon_projects WHERE id = $1', [req.params.id]);
+    if (ownerCheck.rowCount === 0) return res.status(404).json({ code: 'not_found' });
+    if (ownerCheck.rows[0].owner_id !== user.id) return res.status(403).json({ code: 'forbidden' });
+  }
   const { id } = req.params;
   const { status, biodiversityScore, healthImpactScore, actualCO2Reduction } = req.body;
 
@@ -179,6 +200,15 @@ router.get('/:id/stats', async (req: Request, res: Response) => {
 
     const stats = measurementStats.rows[0];
 
+    // RIU issuance stats
+    const riuStats = await query(
+      `SELECT
+         COUNT(*) FILTER (WHERE status != 'retired') AS issued,
+         COUNT(*) FILTER (WHERE status = 'retired') AS retired
+       FROM riums WHERE project_id = $1`,
+      [id]
+    );
+
     res.json({
       projectId: id,
       projectName: project.name,
@@ -191,16 +221,16 @@ router.get('/:id/stats', async (req: Request, res: Response) => {
       healthImpactScore: project.health_impact_score,
       measurementCount: parseInt(stats.measurement_count || 0),
       areaHectares: project.area_hectares,
-      riusIssued: 0, // To be calculated
-      riusRetired: 0  // To be calculated
+      riusIssued: parseInt(riuStats.rows[0]?.issued || 0),
+      riusRetired: parseInt(riuStats.rows[0]?.retired || 0)
     });
   } catch (err: any) {
     res.status(500).json({ code: 'server_error', message: err.message });
   }
 });
 
-// Approve Project
-router.post('/:id/approve', async (req: Request, res: Response) => {
+// Approve Project — admin only
+router.post('/:id/approve', authenticate, authorize('admin'), async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const { approverNotes } = req.body;
 
@@ -228,8 +258,8 @@ router.post('/:id/approve', async (req: Request, res: Response) => {
   }
 });
 
-// Reject Project
-router.post('/:id/reject', async (req: Request, res: Response) => {
+// Reject Project — admin only
+router.post('/:id/reject', authenticate, authorize('admin'), async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const { rejectionReason } = req.body;
 

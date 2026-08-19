@@ -1,5 +1,7 @@
 import express, { Request, Response } from 'express';
 import { query } from '../db';
+import { carbonCreditToUSD, verifyPriceIntegrity } from '../../../services/blockchain/oracle/ChainlinkOracle';
+import { writeSensorPoint } from '../../../services/analytics/influxdb/InfluxDBClient';
 
 const router = express.Router();
 
@@ -62,6 +64,25 @@ router.post('/', async (req: Request, res: Response) => {
     // Detect anomalies: flag if values are extreme
     const isAnomaly = (co2Level > 450 || biodiversityScore > 100 || biodiversityScore < 0);
 
+    // Mirror to InfluxDB for real-time sensor stream
+    if (co2Level || ndviIndex || biodiversityScore) {
+      writeSensorPoint({
+        sensorId: `satellite-${satelliteSource}-${projectId}`,
+        type: 'satellite_measurement',
+        value: co2Level ?? ndviIndex ?? biodiversityScore ?? 0,
+        unit: co2Level ? 'ppm' : ndviIndex ? 'ndvi' : 'score',
+        lat: location?.latitude,
+        lng: location?.longitude,
+        timestamp: measurementDate ? new Date(measurementDate) : new Date(),
+      }).catch(e => console.warn('[measurements-v2] InfluxDB mirror failed:', e));
+    }
+
+    // Chainlink oracle: verify carbon credit USD value if co2Level provided
+    let oracleUsdValue: number | null = null;
+    if (co2Level) {
+      oracleUsdValue = await carbonCreditToUSD(co2Level).catch(() => null);
+    }
+
     const result = await query(
       `INSERT INTO measurement_data 
        (project_id, measurement_date, satellite_source, co2_level, soil_carbon_ppm, ndvi_index, 
@@ -88,6 +109,7 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(201).json({
       measurement: result.rows[0],
       anomalyDetected: isAnomaly,
+      oracleUsdValue,
       message: 'Measurement recorded successfully'
     });
   } catch (err: any) {
