@@ -23,7 +23,7 @@ const phases = [
   {
     phase: 2,
     title: 'Intelligence Expansion',
-    status: 'active',
+    status: 'complete',
     color: 'blue',
     items: [
       { name: 'Knowledge Graph', href: '/knowledge-graph', done: true },
@@ -36,7 +36,7 @@ const phases = [
   {
     phase: 3,
     title: 'Advanced Capabilities',
-    status: 'active',
+    status: 'complete',
     color: 'purple',
     items: [
       { name: 'Multi-Agent Intelligence', href: '/multi-agent-intelligence', done: true },
@@ -49,7 +49,7 @@ const phases = [
   {
     phase: 4,
     title: 'Global Ecosystem',
-    status: 'active',
+    status: 'complete',
     color: 'amber',
     items: [
       { name: 'Global Marketplace', href: '/global-marketplace', done: true },
