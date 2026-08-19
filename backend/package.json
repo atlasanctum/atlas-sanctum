@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "lint": "eslint . --ext .ts,.tsx",
     "migrate": "ts-node ./scripts/migrate.ts",
-    "seed:admin": "ts-node db/seedAdmin.ts"
+    "seed:admin": "ts-node db/seedAdmin.ts",
+    "seed:node-zero": "ts-node src/scripts/node-zero-seed.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
