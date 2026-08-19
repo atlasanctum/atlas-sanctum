@@ -61,3 +61,45 @@ export interface OfflineSyncProtocol {
   flush(): Promise<SyncPacket[]>;
   pending(): SyncPacket[];
 }
+
+// ─── Request / Response Protocol ─────────────────────────────────────────────
+// Typed RPC envelope for cross-layer calls that need a reply.
+
+export interface LayerRequest<T = unknown> {
+  id: string;
+  fromRole: NodeRole;
+  toRole: NodeRole;
+  operation: string;
+  payload: T;
+  timeout?: number;   // ms; default 5000
+  createdAt: Date;
+}
+
+export interface LayerResponse<T = unknown> {
+  requestId: string;
+  success: boolean;
+  payload?: T;
+  error?: string;
+  latencyMs: number;
+  respondedAt: Date;
+}
+
+// ─── Telemetry Protocol ───────────────────────────────────────────────────────
+// Lightweight span emitted by any layer for observability.
+
+export interface TelemetrySpan {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  layer: NodeRole;
+  operation: string;
+  startedAt: Date;
+  durationMs: number;
+  status: 'ok' | 'error';
+  attributes?: Record<string, string | number | boolean>;
+}
+
+export interface TelemetryCollector {
+  emit(span: TelemetrySpan): void;
+  flush(): TelemetrySpan[];
+}
