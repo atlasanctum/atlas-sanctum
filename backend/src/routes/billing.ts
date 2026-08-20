@@ -8,6 +8,7 @@ import { Router } from 'express';
 import { billingService } from '../services/billing';
 import { invoiceService } from '../services/invoice';
 import { paymentService } from '../services/payment';
+import { usageForecastingService } from '../services/usageForecasting';
 import { authenticate } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 
@@ -746,4 +747,39 @@ router.delete('/payment-methods/:id', authenticate, async (req: any, res) => {
   }
 });
 
+// ── Usage Forecasting (E5 remaining) ─────────────────────────────────────────
+
+router.get('/forecasts', authenticate, async (req: any, res) => {
+  try {
+    const orgId = req.user.tenantId || req.user.organizationId || req.user.id;
+    const forecasts = await usageForecastingService.forecast(orgId);
+    res.json({ success: true, data: forecasts });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/budgets', authenticate, async (req: any, res) => {
+  try {
+    const orgId = req.user.tenantId || req.user.organizationId || req.user.id;
+    const budgets = await usageForecastingService.getBudgets(orgId);
+    res.json({ success: true, data: budgets });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/budgets', authenticate, async (req: any, res) => {
+  try {
+    const orgId = req.user.tenantId || req.user.organizationId || req.user.id;
+    const { metric, monthlyBudget, alertThresholds } = req.body;
+    if (!metric || !monthlyBudget) return res.status(400).json({ error: 'metric and monthlyBudget required' });
+    const budget = await usageForecastingService.setBudget(orgId, metric, monthlyBudget, alertThresholds);
+    res.json({ success: true, data: budget });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
+

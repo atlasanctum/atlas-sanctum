@@ -59,6 +59,20 @@ const phases = [
       { name: 'Plugin Marketplace', href: '/plugin-marketplace', done: true },
     ],
   },
+  {
+    phase: 5,
+    title: 'Planetary Intelligence',
+    status: 'active',
+    color: 'rose',
+    items: [
+      { name: 'Webhook Management', href: '/webhooks', done: true },
+      { name: 'Enterprise Collaboration', href: '/collaboration', done: true },
+      { name: 'Workflow Automation', href: '/automation', done: true },
+      { name: 'Usage Forecasting', href: '/usage-forecasting', done: true },
+      { name: 'Interactive API Tester', href: '/api-tester', done: true },
+      { name: 'ZK Proof Layer', href: '/blockchain-verification', done: false },
+    ],
+  },
 ];
 
 const statusConfig = {

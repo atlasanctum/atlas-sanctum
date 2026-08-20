@@ -139,6 +139,12 @@ const OpenResearchPlatform = lazy(() => import('./pages/OpenResearchPlatform'));
 const CommunityEcosystem = lazy(() => import('./pages/CommunityEcosystem'));
 const DeveloperSDK = lazy(() => import('./pages/DeveloperSDK'));
 const PluginMarketplace = lazy(() => import('./pages/PluginMarketplace'));
+// Phase 5
+const WebhookManagement = lazy(() => import('./pages/enterprise/WebhookManagement'));
+const EnterpriseCollaboration = lazy(() => import('./pages/enterprise/EnterpriseCollaboration'));
+const WorkflowAutomation = lazy(() => import('./pages/enterprise/WorkflowAutomation'));
+const UsageForecasting = lazy(() => import('./pages/enterprise/UsageForecasting'));
+const APITester = lazy(() => import('./pages/enterprise/APITester'));
 
 /**
  * AnimatedRoutes — lives inside BrowserRouter so useLocation() is available.
@@ -272,6 +278,12 @@ const AnimatedRoutes = () => {
         <Route path="/community-ecosystem" element={<PageTransition><CommunityEcosystem /></PageTransition>} />
         <Route path="/developer-sdk" element={<PageTransition><DeveloperSDK /></PageTransition>} />
         <Route path="/plugin-marketplace" element={<PageTransition><PluginMarketplace /></PageTransition>} />
+        {/* Phase 5 */}
+        <Route path="/webhooks" element={<ProtectedRoute requiredRole="enterprise"><PageTransition><WebhookManagement /></PageTransition></ProtectedRoute>} />
+        <Route path="/collaboration" element={<ProtectedRoute requiredRole="enterprise"><PageTransition><EnterpriseCollaboration /></PageTransition></ProtectedRoute>} />
+        <Route path="/automation" element={<ProtectedRoute requiredRole="enterprise"><PageTransition><WorkflowAutomation /></PageTransition></ProtectedRoute>} />
+        <Route path="/usage-forecasting" element={<ProtectedRoute requiredRole="enterprise"><PageTransition><UsageForecasting /></PageTransition></ProtectedRoute>} />
+        <Route path="/api-tester" element={<PageTransition><APITester /></PageTransition>} />
         <Route path="*" element={<PageTransition variant="fade"><NotFound /></PageTransition>} />
       </Routes>
     </AnimatePresence>
